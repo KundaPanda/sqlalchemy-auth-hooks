@@ -1,6 +1,14 @@
 import abc
 from typing import Any
 
+from sqlalchemy.orm import Mapper
+
+
+class ReferencedEntity:
+    def __init__(self, entity: Mapper, keys: dict[str, Any] | None = None) -> None:
+        self.entity = entity
+        self.keys = keys or {}
+
 
 class SQLAlchemyAuthHandler(abc.ABC):
     """
@@ -23,6 +31,13 @@ class SQLAlchemyAuthHandler(abc.ABC):
 
     @abc.abstractmethod
     async def on_update(self, instance: Any, changes: dict[str, Any]) -> None:
+        """
+        Handle the deletion of an SQLAlchemy model.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def on_select(self, instance: Any) -> bool:
         """
         Handle the deletion of an SQLAlchemy model.
         """
