@@ -1,0 +1,123 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "sqlalchemy-auth-hooks"
+version = "0.0.1"
+description = ""
+authors = ["Vojtěch Dohnal <vojdoh@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "sqlalchemy_auth_hooks" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+sqlalchemy = "^2.0.9"
+structlog = "^23.1.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = { extras = ["d"], version = "^23.3.0" }
+ruff = "^0.0.261"
+pyright = "^1.1.303"
+pytest = "^7.3.0"
+pytest-mock = "^3.10.0"
+pytest-xdist = "^3.2.1"
+pytest-cov = "^4.0.0"
+sqlalchemy-utils = "^0.41.0"
+
+
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311']
+extend-exclude = '''
+/(
+    typings
+)/
+'''
+
+
+[tool.ruff]
+########## RUFF ##########
+line-length = 120
+target-version = 'py311'
+select = [
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings
+    "F", # pyflakes
+    "I", # isort
+    "C", # flake8-comprehensions
+    "B", # flake8-bugbear
+    "C90", # mccabe complexity
+]
+ignore = [
+    "E501", # line too long, handled by black
+]
+extend-exclude = ["tests", "typings"]
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.ruff.isort]
+known-third-party = []
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+useLibraryCodeForTypes = true
+reportMissingImports = true
+reportImportCycles = true
+reportMissingTypeStubs = true
+venvPath = "./.venv/"
+venv = "./"
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "tests",
+    "migrations/env.py",
+    "typings/",
+    ".venv/",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-raqs"
+testpaths = [
+    "tests",
+]
+python_classes = [
+    "*Test",
+    "Test*"
+]
+
+
+[tool.coverage.run]
+branch = true
+omit = [
+    # tests
+    "*/tests/*",
+    "*/migrations/*",
+    "*/typings/*"
+]
+parallel = true
+source = [
+    "sqlalchemy_auth_hooks",
+]
+
+
+[tool.coverage.paths]
+source = [
+    "sqlalchemy_auth_hooks",
+]
+
+[tool.coverage.report]
+sort = "Cover"
+exclude_lines = [
+    "pragma: no cover",
+]
