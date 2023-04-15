@@ -9,6 +9,13 @@ class ReferencedEntity:
         self.entity = entity
         self.keys = keys or {}
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ReferencedEntity):
+            return NotImplemented
+        return self.entity == other.entity and (
+            len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
+        )
+
 
 class SQLAlchemyAuthHandler(abc.ABC):
     """

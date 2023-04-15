@@ -14,6 +14,7 @@ packages = [{ include = "sqlalchemy_auth_hooks" }]
 python = "^3.11"
 sqlalchemy = "^2.0.9"
 structlog = "^23.1.0"
+asgiref = "^3.6.0"
 
 
 [tool.poetry.group.dev.dependencies]

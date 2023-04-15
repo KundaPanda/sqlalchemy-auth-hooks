@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Any, Generic, TypeVar
 
 import structlog
+from asgiref.sync import async_to_sync
 from sqlalchemy import BinaryExpression, BindParameter, BooleanClauseList, ColumnClause, Select, Table, event
 from sqlalchemy.orm import InstanceState, Mapper, ORMExecuteState, Session, UOWTransaction
 from structlog.stdlib import BoundLogger
@@ -97,12 +98,7 @@ class ORMHooks:
             return
         for pending_instance_key in self._pending_hooks[session]:
             for hook in self._pending_hooks[session][pending_instance_key]:
-                if self.loop.is_running():
-                    task = self.loop.create_task(hook.run(self.handler))
-                    self._tasks.add(task)
-                    task.add_done_callback(self._tasks.remove)
-                else:
-                    self.loop.run_until_complete(hook.run(self.handler))
+                async_to_sync(hook.run)(self.handler)
         del self._pending_hooks[session]
 
     def after_rollback(self, session: Session) -> None:
@@ -117,7 +113,7 @@ class ORMHooks:
         if orm_execute_state.is_select:
             entities = _collect_entities(orm_execute_state)
             for entity in entities:
-                self.handler.on_select(entity)
+                async_to_sync(self.handler.on_select)(entity)
 
 
 def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
@@ -149,7 +145,7 @@ def _process_condition(
             if isinstance(table, Table) and (mapper := mappers.get(table)):
                 ref_entity = intermediate_result[mapper]
                 key_name = left.name
-                key_value = parameters.get(right.key)
+                key_value = right.effective_value or parameters.get(right.key)
                 if key_value is not None:
                     ref_entity.keys[key_name] = key_value
 
