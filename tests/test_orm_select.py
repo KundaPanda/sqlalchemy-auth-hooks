@@ -190,3 +190,17 @@ def test_join_joinedload(engine, add_user, user_group, auth_handler):
     assert auth_handler.on_select.call_args_list[0].args[0][1].selectable.original == UserGroup.__table__
     assert auth_handler.on_select.call_args_list[0].args[0][2].entity == inspect(Group)
     assert auth_handler.on_select.call_args_list[0].args[0][2].selectable.original == Group.__table__
+
+
+def test_join_lazyload(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        user: User = session.scalar(select(User).limit(1))
+        _ = user.groups
+        _ = user.groups[0].group.name
+    assert auth_handler.on_select.call_count == 3
+    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(User), selectable=User.__table__)])
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)])
+    # Only one group should be queried
+    auth_handler.on_select.assert_called_with(
+        [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__, keys={'id': 1})])
