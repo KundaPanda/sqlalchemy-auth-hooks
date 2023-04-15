@@ -44,7 +44,7 @@ class SQLAlchemyAuthHandler(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def on_select(self, instance: Any) -> bool:
+    async def on_select(self, referenced: list[ReferencedEntity]) -> bool:
         """
         Handle the deletion of an SQLAlchemy model.
         """

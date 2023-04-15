@@ -1,11 +1,21 @@
 import abc
 import asyncio
 from collections import defaultdict
-from typing import Any, Generic, TypeVar
+from typing import Any, Generator, Generic, TypeVar
 
 import structlog
 from asgiref.sync import async_to_sync
-from sqlalchemy import BinaryExpression, BindParameter, BooleanClauseList, ColumnClause, Select, Table, event
+from sqlalchemy import (
+    BinaryExpression,
+    BindParameter,
+    BooleanClauseList,
+    ColumnClause,
+    FromClause,
+    Join,
+    Select,
+    Table,
+    event,
+)
 from sqlalchemy.orm import InstanceState, Mapper, ORMExecuteState, Session, UOWTransaction
 from structlog.stdlib import BoundLogger
 
@@ -112,8 +122,7 @@ class ORMHooks:
         logger.debug("do_orm_execute")
         if orm_execute_state.is_select:
             entities = _collect_entities(orm_execute_state)
-            for entity in entities:
-                async_to_sync(self.handler.on_select)(entity)
+            async_to_sync(self.handler.on_select)(entities)
 
 
 def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
@@ -164,6 +173,17 @@ def _traverse_conditions(
             _process_condition(condition, mappers, intermediate_result, parameters)
 
 
+def _extract_mappers_from_clause(
+    clause: FromClause, table_mapeprs: dict[Table, Mapper]
+) -> Generator[Mapper, None, None]:
+    if isinstance(clause, Table):
+        if mapper := table_mapeprs.get(clause):
+            yield mapper
+    elif isinstance(clause, Join):
+        yield from _extract_mappers_from_clause(clause.left, table_mapeprs)
+        yield from _extract_mappers_from_clause(clause.right, table_mapeprs)
+
+
 def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     intermediate_result = {}
 
@@ -172,15 +192,16 @@ def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     select_statement = state.statement
 
     # Extract mappers from the FROM clause
-    tables = select_statement.get_final_froms()
-    mappers = {mapper.local_table: mapper for mapper in state.all_mappers}
+    registry = state.bind_mapper.registry
+    froms = select_statement.get_final_froms()
+    table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
 
-    for table in tables:
-        if mapper := mappers.get(table):
+    for from_clause in froms:
+        for mapper in _extract_mappers_from_clause(from_clause, table_mappers):
             intermediate_result[mapper] = ReferencedEntity(entity=mapper, keys={})
 
     # Extract primary key conditions from the WHERE clause, if any
     where_clause = select_statement.whereclause
-    _traverse_conditions(where_clause, mappers, intermediate_result, state.parameters or {})
+    _traverse_conditions(where_clause, table_mappers, intermediate_result, state.parameters or {})
 
     return list(intermediate_result.values())
