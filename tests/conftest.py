@@ -1,12 +1,18 @@
 import pytest
 from pytest_mock import MockerFixture
 from sqlalchemy import ForeignKey, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship, backref
 
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
 
 Base = declarative_base()
+
+
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
 
 
 class UserGroup(Base):
@@ -38,6 +44,14 @@ class Group(Base):
 def engine(worker_id):
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
+    yield engine
+
+
+@pytest.fixture(scope="session")
+async def async_engine(worker_id, anyio_backend):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield engine
 
 

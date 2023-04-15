@@ -125,6 +125,18 @@ files = [
 frozenlist = ">=1.1.0"
 
 [[package]]
+name = "aiosqlite"
+version = "0.18.0"
+description = "asyncio bridge to the standard sqlite3 module"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "aiosqlite-0.18.0-py3-none-any.whl", hash = "sha256:c3511b841e3a2c5614900ba1d179f366826857586f78abd75e7cbeb88e75a557"},
+    {file = "aiosqlite-0.18.0.tar.gz", hash = "sha256:faa843ef5fb08bafe9a9b3859012d3d9d6f77ce3637899de20606b7fc39aa213"},
+]
+
+[[package]]
 name = "anyio"
 version = "3.6.2"
 description = "High level compatibility layer for multiple asynchronous event loop implementations"
@@ -1162,4 +1174,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "f8a71b9a7e78f0dd5b7b425184b0c9512d89e84e5140f6a6301ea34a3bc38ad1"
+content-hash = "453cc354a66549f1a54e0c83ecd4fda94bbc7074a0667dd656d52f0bc4f85e6b"

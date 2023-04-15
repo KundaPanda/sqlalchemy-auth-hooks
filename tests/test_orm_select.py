@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy import delete, inspect, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
@@ -32,6 +33,32 @@ def user_group(engine, add_user):
     return group
 
 
+@pytest.fixture
+@pytest.mark.early
+async def add_user_async(anyio_backend, async_engine):
+    user = User(name="John", age=42)
+    async with AsyncSession(async_engine) as session:
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        session.expunge(user)
+    return user
+
+
+@pytest.fixture
+@pytest.mark.early
+async def user_group_async(async_engine, add_user_async):
+    async with AsyncSession(async_engine) as session:
+        group = Group(name="Test Users")
+        session.add(group)
+        await session.flush()
+        group.users.append(UserGroup(user_id=add_user.id, group_id=group.id))
+        await session.commit()
+        await session.refresh(group)
+        session.expunge(group)
+    return group
+
+
 @pytest.fixture(autouse=True)
 def cleanup(engine):
     yield
@@ -40,6 +67,16 @@ def cleanup(engine):
         session.execute(delete(Group).where())
         session.execute(delete(UserGroup).where())
         session.commit()
+
+
+@pytest.fixture(autouse=True)
+async def cleanup_async(anyio_backend, async_engine):
+    yield
+    async with AsyncSession(async_engine) as session:
+        await session.execute(delete(User).where())
+        await session.execute(delete(Group).where())
+        await session.execute(delete(UserGroup).where())
+        await session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -215,4 +252,16 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler):
     # Only one group should be queried
     auth_handler.on_select.assert_called_with(
         [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__, keys={"id": 1})]
+    )
+
+
+async def test_join_async(anyio_backend, async_engine, add_user_async, user_group_async, auth_handler):
+    async with AsyncSession(async_engine) as session:
+        await session.execute(select(User).join(User.groups).join(UserGroup.group))
+    auth_handler.on_select.assert_called_once_with(
+        [
+            ReferencedEntity(entity=inspect(User), selectable=User.__table__),
+            ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
+            ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
+        ]
     )

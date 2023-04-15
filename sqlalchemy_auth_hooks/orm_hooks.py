@@ -1,8 +1,9 @@
 import abc
 import asyncio
 from collections import defaultdict
-from itertools import chain
-from typing import Any, Generator, Generic, TypeVar, cast
+from queue import Queue
+from threading import Event
+from typing import Any, Callable, Coroutine, Generator, Generic, TypeVar, cast
 
 import structlog
 from asgiref.sync import async_to_sync
@@ -65,20 +66,28 @@ class _UpdateHook(_MutationHook[_O]):
         await handler.on_update(self.state.object, self.changes)
 
 
+T = TypeVar("T")
+
+
 class ORMHooks:
     def __init__(self, handler: SQLAlchemyAuthHandler) -> None:
         self.handler = handler
         self._tasks: set[asyncio.Task] = set()
-        self._loop: asyncio.AbstractEventLoop | None = None
         self._pending_hooks: dict[Session, dict[tuple[Any] | None, list[_Hook]]] = defaultdict(
             lambda: defaultdict(list)
         )
 
-    @property
-    def loop(self) -> asyncio.AbstractEventLoop:
-        if self._loop is None:
-            self._loop = asyncio.get_event_loop()
-        return self._loop
+    def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Run async function in the running event loop from the sync context
+            done_event = Event()
+            result_queue = Queue()
+            schedule_async_function(func, *args, done_event=done_event, result_queue=result_queue)
+            done_event.wait()
+            return result_queue.get()
+        else:
+            return async_to_sync(func)(*args)
 
     @staticmethod
     def _get_state_changes(state: InstanceState[_O]) -> dict[str, Any]:
@@ -111,7 +120,7 @@ class ORMHooks:
             return
         for pending_instance_key in self._pending_hooks[session]:
             for hook in self._pending_hooks[session][pending_instance_key]:
-                async_to_sync(hook.run)(self.handler)
+                self.call_async(hook.run, self.handler)
         del self._pending_hooks[session]
 
     def after_rollback(self, session: Session) -> None:
@@ -125,7 +134,7 @@ class ORMHooks:
         logger.debug("do_orm_execute")
         if orm_execute_state.is_select:
             entities = _collect_entities(orm_execute_state)
-            async_to_sync(self.handler.on_select)(entities)
+            self.call_async(self.handler.on_select, entities)
 
 
 def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
@@ -217,3 +226,18 @@ def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     _traverse_conditions(where_clause, table_mappers, intermediate_result, state.parameters or {})
 
     return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()]
+
+
+def schedule_async_function(async_func, *args, done_event, result_queue):
+    loop = asyncio.get_event_loop()
+
+    async def wrapper():
+        try:
+            result = await async_func(*args)
+        except Exception as e:
+            result = e
+        finally:
+            result_queue.put(result)
+            done_event.set()
+
+    loop.call_soon_threadsafe(lambda: asyncio.create_task(wrapper()))
