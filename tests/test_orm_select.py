@@ -71,7 +71,7 @@ def test_select_multiple_pk(engine, add_user, auth_handler, user_group):
 
 def test_join(engine, add_user, auth_handler, user_group):
     with Session(engine) as session:
-        session.execute(select(User).join(User.groups).join(UserGroup.groups))
+        session.execute(select(User).join(User.groups).join(UserGroup.group))
     auth_handler.on_select.assert_called_once_with(
         [
             ReferencedEntity(entity=inspect(User)),

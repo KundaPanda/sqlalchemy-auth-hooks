@@ -13,8 +13,8 @@ class UserGroup(Base):
     __tablename__ = "user_groups"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"), primary_key=True)
-    groups: Mapped[list["Group"]] = relationship()
-    users: Mapped[list["User"]] = relationship()
+    group: Mapped["Group"] = relationship()
+    user: Mapped["User"] = relationship()
 
 
 class User(Base):
@@ -22,14 +22,14 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     age: Mapped[int]
-    groups: Mapped[list["UserGroup"]] = relationship()
+    groups: Mapped[list["UserGroup"]] = relationship(back_populates="user")
 
 
 class Group(Base):
     __tablename__ = "groups"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
-    users: Mapped[list["UserGroup"]] = relationship()
+    users: Mapped[list["UserGroup"]] = relationship(back_populates="group")
 
 
 @pytest.fixture(scope="session", autouse=True)
