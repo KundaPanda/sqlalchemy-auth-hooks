@@ -46,3 +46,27 @@ def auth_handler(engine, mocker: MockerFixture):
     test_handler = mocker.Mock(spec=SQLAlchemyAuthHandler)
     register_hooks(test_handler)
     yield test_handler
+
+
+def reorder_early_fixtures(metafunc):
+    """
+    Put fixtures with `pytest.mark.early` first during execution
+
+    This allows patch of configurations before the application is initialized
+
+    """
+    for fixture_def in metafunc._arg2fixturedefs.values():  # type: ignore
+        fixture_def = fixture_def[0]
+        for mark in getattr(fixture_def.func, "pytestmark", []):
+            if mark.name == "early":
+                order = metafunc.fixturenames
+                order.insert(0, order.pop(order.index(fixture_def.argname)))
+                break
+
+
+def pytest_generate_tests(metafunc):
+    reorder_early_fixtures(metafunc)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "early: fixture should be ran early")

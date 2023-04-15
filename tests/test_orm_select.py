@@ -1,29 +1,9 @@
 import pytest
 from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from tests.conftest import Group, User, UserGroup
-
-
-def reorder_early_fixtures(metafunc):
-    """
-    Put fixtures with `pytest.mark.early` first during execution
-
-    This allows patch of configurations before the application is initialized
-
-    """
-    for fixture_def in metafunc._arg2fixturedefs.values():  # type: ignore
-        fixture_def = fixture_def[0]
-        for mark in getattr(fixture_def.func, "pytestmark", []):
-            if mark.name == "early":
-                order = metafunc.fixturenames
-                order.insert(0, order.pop(order.index(fixture_def.argname)))
-                break
-
-
-def pytest_generate_tests(metafunc):
-    reorder_early_fixtures(metafunc)
 
 
 @pytest.fixture
@@ -181,3 +161,16 @@ def test_join_recursive_with_condition(engine, add_user, user_group, auth_handle
             ReferencedEntity(entity=inspect(Group), selectable=alias, keys={"id": 2}),
         ]
     )
+
+
+def test_join_selectinload(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.execute(select(User).options(selectinload(User.groups).selectinload(UserGroup.group))).all()
+    # First, the user table is queried
+    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(User), selectable=User.__table__)])
+    # Then, a selectinload is performed on the user-groups
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)]
+    )
+    # Finally, a selectinload is performed on the groups as well
+    auth_handler.on_select.assert_called_with([ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)])
