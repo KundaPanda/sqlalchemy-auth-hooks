@@ -1,7 +1,8 @@
 import abc
 import asyncio
 from collections import defaultdict
-from typing import Any, Generator, Generic, TypeVar
+from itertools import chain
+from typing import Any, Generator, Generic, TypeVar, cast
 
 import structlog
 from asgiref.sync import async_to_sync
@@ -17,8 +18,8 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.orm import InstanceState, Mapper, ORMExecuteState, Session, UOWTransaction
-from sqlalchemy.orm.util import AliasedClass
-from sqlalchemy.sql.selectable import AnnotatedFromClause, Alias
+from sqlalchemy.sql import operators
+from sqlalchemy.sql.selectable import Alias
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity, SQLAlchemyAuthHandler
@@ -143,18 +144,25 @@ def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
 def _process_condition(
         condition: BinaryExpression,
         mappers: dict[Table, Mapper],
-        intermediate_result: dict[Mapper, ReferencedEntity],
+        intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
         parameters: dict[str, Any],
 ) -> None:
+    if condition.operator != operators.eq:
+        # We only care about equality conditions for now
+        return
     left = condition.left
     right = condition.right
 
     if isinstance(left, ColumnClause) and isinstance(right, BindParameter):
-        table = left.table
+        selectable = left.table
+        if isinstance(selectable, Alias):
+            table = cast(Table, selectable.element)
+        else:
+            table = cast(Table, selectable)
         primary_key_columns = table.primary_key.columns.values()
-        if left in primary_key_columns:
+        if any(pk.key == left.key for pk in primary_key_columns):
             if isinstance(table, Table) and (mapper := mappers.get(table)):
-                ref_entity = intermediate_result[mapper]
+                ref_entity = intermediate_result[mapper][selectable]
                 key_name = left.name
                 key_value = right.effective_value or parameters.get(right.key)
                 if key_value is not None:
@@ -164,7 +172,7 @@ def _process_condition(
 def _traverse_conditions(
         condition: BooleanClauseList | BinaryExpression | None,
         mappers: dict[Table, Mapper],
-        intermediate_result: dict[Mapper, ReferencedEntity],
+        intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
         parameters: dict[str, Any],
 ) -> None:
     if condition is not None:
@@ -177,19 +185,19 @@ def _traverse_conditions(
 
 def _extract_mappers_from_clause(
         clause: FromClause, table_mappers: dict[Table, Mapper]
-) -> Generator[Mapper, None, None]:
+) -> Generator[tuple[Mapper, FromClause], None, None]:
     if isinstance(clause, Table):
         if mapper := table_mappers.get(clause):
-            yield mapper
+            yield mapper, clause.selectable
     elif isinstance(clause, Join):
         yield from _extract_mappers_from_clause(clause.left, table_mappers)
         yield from _extract_mappers_from_clause(clause.right, table_mappers)
     elif isinstance(clause, Alias):
-        yield from _extract_mappers_from_clause(clause.element, table_mappers)
+        yield next(_extract_mappers_from_clause(clause.element, table_mappers))[0], clause.selectable
 
 
 def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
-    intermediate_result = {}
+    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]] = defaultdict(dict)
 
     if not isinstance(state.statement, Select):
         return []
@@ -201,11 +209,11 @@ def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
 
     for from_clause in froms:
-        for mapper in _extract_mappers_from_clause(from_clause, table_mappers):
-            intermediate_result[mapper] = ReferencedEntity(entity=mapper, keys={})
+        for mapper, selectable in _extract_mappers_from_clause(from_clause, table_mappers):
+            intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable, keys={})
 
     # Extract primary key conditions from the WHERE clause, if any
     where_clause = select_statement.whereclause
     _traverse_conditions(where_clause, table_mappers, intermediate_result, state.parameters or {})
 
-    return list(intermediate_result.values())
+    return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()]

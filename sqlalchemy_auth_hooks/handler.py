@@ -1,23 +1,25 @@
 import abc
 from typing import Any
 
+from sqlalchemy import FromClause
 from sqlalchemy.orm import Mapper
 
 
 class ReferencedEntity:
-    def __init__(self, entity: Mapper, keys: dict[str, Any] | None = None) -> None:
+    def __init__(self, entity: Mapper, selectable: FromClause, keys: dict[str, Any] | None = None) -> None:
         self.entity = entity
+        self.selectable = selectable
         self.keys = keys or {}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ReferencedEntity):
             return NotImplemented
         return self.entity == other.entity and (
-            len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
+                len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
         )
 
     def __repr__(self) -> str:
-        return f"ReferencedEntity({self.entity}, {self.keys})"  # pragma: no cover
+        return f"ReferencedEntity({self.entity}, {self.selectable}, {self.keys})"  # pragma: no cover
 
 
 class SQLAlchemyAuthHandler(abc.ABC):
