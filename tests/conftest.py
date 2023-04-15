@@ -1,7 +1,7 @@
 import pytest
 from pytest_mock import MockerFixture
 from sqlalchemy import ForeignKey, create_engine
-from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship, backref
 
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
@@ -30,6 +30,8 @@ class Group(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     users: Mapped[list["UserGroup"]] = relationship(back_populates="group")
+    parent_group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"))
+    subgroups = relationship("Group", backref=backref("parent_group", remote_side=[id]))
 
 
 @pytest.fixture(scope="session", autouse=True)

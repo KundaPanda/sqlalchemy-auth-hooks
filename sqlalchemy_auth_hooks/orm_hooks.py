@@ -17,6 +17,8 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.orm import InstanceState, Mapper, ORMExecuteState, Session, UOWTransaction
+from sqlalchemy.orm.util import AliasedClass
+from sqlalchemy.sql.selectable import AnnotatedFromClause, Alias
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity, SQLAlchemyAuthHandler
@@ -139,10 +141,10 @@ def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
 
 
 def _process_condition(
-    condition: BinaryExpression,
-    mappers: dict[Table, Mapper],
-    intermediate_result: dict[Mapper, ReferencedEntity],
-    parameters: dict[str, Any],
+        condition: BinaryExpression,
+        mappers: dict[Table, Mapper],
+        intermediate_result: dict[Mapper, ReferencedEntity],
+        parameters: dict[str, Any],
 ) -> None:
     left = condition.left
     right = condition.right
@@ -160,10 +162,10 @@ def _process_condition(
 
 
 def _traverse_conditions(
-    condition: BooleanClauseList | BinaryExpression | None,
-    mappers: dict[Table, Mapper],
-    intermediate_result: dict[Mapper, ReferencedEntity],
-    parameters: dict[str, Any],
+        condition: BooleanClauseList | BinaryExpression | None,
+        mappers: dict[Table, Mapper],
+        intermediate_result: dict[Mapper, ReferencedEntity],
+        parameters: dict[str, Any],
 ) -> None:
     if condition is not None:
         if hasattr(condition, "clauses"):
@@ -174,14 +176,16 @@ def _traverse_conditions(
 
 
 def _extract_mappers_from_clause(
-    clause: FromClause, table_mapeprs: dict[Table, Mapper]
+        clause: FromClause, table_mappers: dict[Table, Mapper]
 ) -> Generator[Mapper, None, None]:
     if isinstance(clause, Table):
-        if mapper := table_mapeprs.get(clause):
+        if mapper := table_mappers.get(clause):
             yield mapper
     elif isinstance(clause, Join):
-        yield from _extract_mappers_from_clause(clause.left, table_mapeprs)
-        yield from _extract_mappers_from_clause(clause.right, table_mapeprs)
+        yield from _extract_mappers_from_clause(clause.left, table_mappers)
+        yield from _extract_mappers_from_clause(clause.right, table_mappers)
+    elif isinstance(clause, Alias):
+        yield from _extract_mappers_from_clause(clause.element, table_mappers)
 
 
 def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:

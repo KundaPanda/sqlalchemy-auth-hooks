@@ -17,7 +17,7 @@ class ReferencedEntity:
         )
 
     def __repr__(self) -> str:
-        return f"ReferencedEntity({self.entity}, {self.keys})"
+        return f"ReferencedEntity({self.entity}, {self.keys})"  # pragma: no cover
 
 
 class SQLAlchemyAuthHandler(abc.ABC):

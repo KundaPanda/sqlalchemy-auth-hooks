@@ -1,25 +1,46 @@
 import pytest
 from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from tests.conftest import Group, User, UserGroup
 
 
+def reorder_early_fixtures(metafunc):
+    """
+    Put fixtures with `pytest.mark.early` first during execution
+
+    This allows patch of configurations before the application is initialized
+
+    """
+    for fixture_def in metafunc._arg2fixturedefs.values():  # type: ignore
+        fixture_def = fixture_def[0]
+        for mark in getattr(fixture_def.func, "pytestmark", []):
+            if mark.name == "early":
+                order = metafunc.fixturenames
+                order.insert(0, order.pop(order.index(fixture_def.argname)))
+                break
+
+
+def pytest_generate_tests(metafunc):
+    reorder_early_fixtures(metafunc)
+
+
 @pytest.fixture
-def add_user(engine, auth_handler):
+@pytest.mark.early
+def add_user(engine):
     user = User(name="John", age=42)
     with Session(engine) as session:
         session.add(user)
         session.commit()
         session.refresh(user)
         session.expunge(user)
-    auth_handler.reset_mock()
     return user
 
 
 @pytest.fixture
-def user_group(engine, add_user, auth_handler):
+@pytest.mark.early
+def user_group(engine, add_user):
     with Session(engine) as session:
         group = Group(name="Test Users")
         session.add(group)
@@ -28,8 +49,12 @@ def user_group(engine, add_user, auth_handler):
         session.commit()
         session.refresh(group)
         session.expunge(group)
-    auth_handler.reset_mock()
     return group
+
+
+@pytest.fixture(autouse=True)
+def reset_handler(auth_handler):
+    auth_handler.reset_mock()
 
 
 def test_simple_get(engine, add_user, auth_handler):
@@ -102,5 +127,25 @@ def test_join_with_condition(engine, add_user, user_group, auth_handler):
             ReferencedEntity(entity=inspect(User)),
             ReferencedEntity(entity=inspect(UserGroup)),
             ReferencedEntity(entity=inspect(Group)),
+        ]
+    )
+
+
+def test_join_recursive(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.add(user_group)
+        group = Group(name="Test Users 2")
+        user_group.subgroups.append(group)
+        session.add(group)
+        session.commit()
+        alias = aliased(Group)
+        session.execute(select(Group).join(Group.subgroups.of_type(alias)))
+    # Called when adding the subgroup
+    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(Group))])
+    # Select itself
+    auth_handler.on_select.assert_called_with(
+        [
+            ReferencedEntity(entity=inspect(Group)),
+            #ReferencedEntity(entity=inspect(alias)), # TODO: this should be alias
         ]
     )
