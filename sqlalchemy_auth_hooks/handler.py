@@ -15,11 +15,11 @@ class ReferencedEntity:
         if not isinstance(other, ReferencedEntity):
             return NotImplemented
         return self.entity == other.entity and (
-                len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
+            len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
         )
 
     def __repr__(self) -> str:
-        return f"ReferencedEntity({self.entity}, {self.selectable}, {self.keys})"  # pragma: no cover
+        return f"ReferencedEntity({self.entity}, {repr(self.selectable)}, {self.keys})"  # pragma: no cover
 
 
 class SQLAlchemyAuthHandler(abc.ABC):

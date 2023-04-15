@@ -1,6 +1,6 @@
 import pytest
 from sqlalchemy import inspect, select
-from sqlalchemy.orm import Session, aliased, selectinload
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from tests.conftest import Group, User, UserGroup
@@ -174,3 +174,19 @@ def test_join_selectinload(engine, add_user, user_group, auth_handler):
     )
     # Finally, a selectinload is performed on the groups as well
     auth_handler.on_select.assert_called_with([ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)])
+
+
+def test_join_joinedload(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.execute(select(User).options(joinedload(User.groups).joinedload(UserGroup.group))).unique().all()
+    # All should be queried at once
+    auth_handler.on_select.assert_called_once()
+    assert len(auth_handler.on_select.call_args_list[0].args[0]) == 3
+    assert auth_handler.on_select.call_args_list[0].args[0][0] == ReferencedEntity(
+        entity=inspect(User), selectable=User.__table__
+    )
+    # Joinedloads have anonymous aliases by default so it's hard to compare them
+    assert auth_handler.on_select.call_args_list[0].args[0][1].entity == inspect(UserGroup)
+    assert auth_handler.on_select.call_args_list[0].args[0][1].selectable.original == UserGroup.__table__
+    assert auth_handler.on_select.call_args_list[0].args[0][2].entity == inspect(Group)
+    assert auth_handler.on_select.call_args_list[0].args[0][2].selectable.original == Group.__table__
