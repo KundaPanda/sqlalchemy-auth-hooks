@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import inspect, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
@@ -30,6 +30,16 @@ def user_group(engine, add_user):
         session.refresh(group)
         session.expunge(group)
     return group
+
+
+@pytest.fixture(autouse=True)
+def cleanup(engine):
+    yield
+    with Session(engine) as session:
+        session.execute(delete(User).where())
+        session.execute(delete(Group).where())
+        session.execute(delete(UserGroup).where())
+        session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -200,7 +210,9 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler):
     assert auth_handler.on_select.call_count == 3
     auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(User), selectable=User.__table__)])
     auth_handler.on_select.assert_any_call(
-        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)])
+        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)]
+    )
     # Only one group should be queried
     auth_handler.on_select.assert_called_with(
-        [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__, keys={'id': 1})])
+        [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__, keys={"id": 1})]
+    )
