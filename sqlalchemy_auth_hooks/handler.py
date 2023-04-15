@@ -16,6 +16,9 @@ class ReferencedEntity:
             len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
         )
 
+    def __repr__(self) -> str:
+        return f"ReferencedEntity({self.entity}, {self.keys})"
+
 
 class SQLAlchemyAuthHandler(abc.ABC):
     """

@@ -60,7 +60,7 @@ def test_simple_select_column_only(engine, add_user, auth_handler):
     auth_handler.on_select.assert_called_once_with([ReferencedEntity(entity=mapper, keys={"id": add_user.id})])
 
 
-def test_select_multiple_pk(engine, add_user, auth_handler, user_group):
+def test_select_multiple_pk(engine, add_user, user_group, auth_handler):
     with Session(engine) as session:
         session.execute(select(UserGroup).filter_by(user_id=add_user.id, group_id=user_group.id))
     mapper = inspect(UserGroup)
@@ -69,9 +69,34 @@ def test_select_multiple_pk(engine, add_user, auth_handler, user_group):
     )
 
 
-def test_join(engine, add_user, auth_handler, user_group):
+def test_join(engine, add_user, user_group, auth_handler):
     with Session(engine) as session:
         session.execute(select(User).join(User.groups).join(UserGroup.group))
+    auth_handler.on_select.assert_called_once_with(
+        [
+            ReferencedEntity(entity=inspect(User)),
+            ReferencedEntity(entity=inspect(UserGroup)),
+            ReferencedEntity(entity=inspect(Group)),
+        ]
+    )
+
+
+def test_join_with_where(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.execute(select(User).join(User.groups).join(UserGroup.group).where(Group.id == 1))
+    auth_handler.on_select.assert_called_once_with(
+        [
+            ReferencedEntity(entity=inspect(User)),
+            ReferencedEntity(entity=inspect(UserGroup)),
+            ReferencedEntity(entity=inspect(Group), keys={"id": 1}),
+        ]
+    )
+
+
+def test_join_with_condition(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.execute(select(User).join(User.groups).join(UserGroup.group.and_(Group.id == 1)))
+    # Although the condition is on the join, treat it as without a condition for now
     auth_handler.on_select.assert_called_once_with(
         [
             ReferencedEntity(entity=inspect(User)),
