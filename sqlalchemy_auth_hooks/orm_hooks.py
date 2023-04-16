@@ -1,12 +1,10 @@
 import abc
 import asyncio
 from collections import defaultdict
-from queue import Queue
-from threading import Event
+from threading import Thread
 from typing import Any, Callable, Coroutine, Generator, Generic, TypeVar, cast
 
 import structlog
-from asgiref.sync import async_to_sync
 from sqlalchemy import (
     BinaryExpression,
     BindParameter,
@@ -76,18 +74,18 @@ class ORMHooks:
         self._pending_hooks: dict[Session, dict[tuple[Any] | None, list[_Hook]]] = defaultdict(
             lambda: defaultdict(list)
         )
+        self._loop = asyncio.new_event_loop()
+
+        def run_loop():
+            asyncio.set_event_loop(self._loop)
+            self._loop.run_forever()
+
+        self._executor_thread = Thread(target=run_loop, daemon=True)
+        self._executor_thread.start()
 
     def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Run async function in the running event loop from the sync context
-            done_event = Event()
-            result_queue = Queue()
-            schedule_async_function(func, *args, done_event=done_event, result_queue=result_queue)
-            done_event.wait()
-            return result_queue.get()
-        else:
-            return async_to_sync(func)(*args)
+        future = asyncio.run_coroutine_threadsafe(func(*args), self._loop)
+        return future.result()
 
     @staticmethod
     def _get_state_changes(state: InstanceState[_O]) -> dict[str, Any]:
@@ -226,18 +224,3 @@ def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     _traverse_conditions(where_clause, table_mappers, intermediate_result, state.parameters or {})
 
     return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()]
-
-
-def schedule_async_function(async_func, *args, done_event, result_queue):
-    loop = asyncio.get_event_loop()
-
-    async def wrapper():
-        try:
-            result = await async_func(*args)
-        except Exception as e:
-            result = e
-        finally:
-            result_queue.put(result)
-            done_event.set()
-
-    loop.call_soon_threadsafe(lambda: asyncio.create_task(wrapper()))
