@@ -84,3 +84,19 @@ def test_select_multiple_pk(engine, add_user, user_group, auth_handler):
             )
         ]
     )
+
+
+def test_select_get(engine, add_user, user_group, auth_handler):
+    with Session(engine) as session:
+        session.get(UserGroup, (add_user.id, user_group.id))
+    mapper = inspect(UserGroup)
+    auth_handler.on_select.assert_called_once_with(
+        [
+            ReferencedEntity(
+                entity=mapper,
+                keys={"user_id": add_user.id, "group_id": user_group.id},
+                selectable=UserGroup.__table__,
+                conditions={"user_id": {"operator": eq, "value": 1}, "group_id": {"operator": eq, "value": 1}},
+            )
+        ]
+    )
