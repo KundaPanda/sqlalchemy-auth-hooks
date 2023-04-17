@@ -2,25 +2,26 @@ import asyncio
 from collections import defaultdict
 from functools import partial
 from threading import Thread
-from typing import Any
+from typing import Any, Callable, Coroutine, TypeVar
 
 from sqlalchemy import (
+    BindParameter,
     ClauseElement,
+    Column,
     Connection,
     Engine,
     ResultProxy,
     Select,
     Update,
     event,
-    inspect,
-    Column,
-    BindParameter,
 )
 from sqlalchemy.orm import DeclarativeMeta, Session
 
 from sqlalchemy_auth_hooks.common_hooks import _Hook
 from sqlalchemy_auth_hooks.handler import ReferencedEntity, SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.utils import _traverse_conditions, run_loop
+
+T = TypeVar("T")
 
 
 class CoreHooks:
@@ -33,6 +34,10 @@ class CoreHooks:
         self._loop = asyncio.new_event_loop()
         self._executor_thread = Thread(target=partial(run_loop, self._loop), daemon=True)
         self._executor_thread.start()
+
+    def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
+        future = asyncio.run_coroutine_threadsafe(func(*args), self._loop)
+        return future.result()
 
     def before_execute(
         self,
@@ -83,7 +88,7 @@ class CoreHooks:
 
             for mapped_dict in references.values():
                 for referenced_entity in mapped_dict.values():
-                    self.handler.on_update(referenced_entity, updated_data)
+                    self.call_async(self.handler.on_update, referenced_entity, updated_data)
 
 
 def _register_core_hooks(handler: SQLAlchemyAuthHandler) -> None:
