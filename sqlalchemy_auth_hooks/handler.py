@@ -28,21 +28,21 @@ class SQLAlchemyAuthHandler(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def on_create(self, instance: Any) -> None:
+    async def on_single_create(self, instance: Any) -> None:
         """
         Handle the creation of an SQLAlchemy model.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def on_delete(self, instance: Any) -> None:
+    async def on_single_delete(self, instance: Any) -> None:
         """
         Handle the deletion of an SQLAlchemy model.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def on_update(self, instance: Any, changes: dict[str, Any]) -> None:
+    async def on_single_update(self, instance: Any, changes: dict[str, Any]) -> None:
         """
         Handle the deletion of an SQLAlchemy model.
         """

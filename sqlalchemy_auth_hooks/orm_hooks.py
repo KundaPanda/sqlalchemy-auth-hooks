@@ -1,6 +1,7 @@
 import abc
 import asyncio
 from collections import defaultdict
+from functools import partial
 from threading import Thread
 from typing import Any, Callable, Coroutine, Generator, Generic, TypeVar, cast
 
@@ -46,13 +47,13 @@ class _MutationHook(_Hook[_O], abc.ABC):
 class _CreateHook(_MutationHook[_O]):
     async def run(self, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Create hook called")
-        await handler.on_create(self.state.object)
+        await handler.on_single_create(self.state.object)
 
 
 class _DeleteHook(_MutationHook[_O]):
     async def run(self, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Delete hook called")
-        await handler.on_delete(self.state.object)
+        await handler.on_single_delete(self.state.object)
 
 
 class _UpdateHook(_MutationHook[_O]):
@@ -62,7 +63,7 @@ class _UpdateHook(_MutationHook[_O]):
 
     async def run(self, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Update hook called")
-        await handler.on_update(self.state.object, self.changes)
+        await handler.on_single_update(self.state.object, self.changes)
 
 
 T = TypeVar("T")
@@ -76,7 +77,7 @@ class ORMHooks:
             lambda: defaultdict(list)
         )
         self._loop = asyncio.new_event_loop()
-        self._executor_thread = Thread(target=run_loop(self._loop), daemon=True)
+        self._executor_thread = Thread(target=partial(run_loop, self._loop), daemon=True)
         self._executor_thread.start()
 
     def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
@@ -145,10 +146,10 @@ def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
 
 
 def _process_condition(
-        condition: BinaryExpression,
-        mappers: dict[Table, Mapper],
-        intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
-        parameters: dict[str, Any],
+    condition: BinaryExpression,
+    mappers: dict[Table, Mapper],
+    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
+    parameters: dict[str, Any],
 ) -> None:
     if condition.operator != operators.eq:
         # We only care about equality conditions for now
@@ -173,10 +174,10 @@ def _process_condition(
 
 
 def _traverse_conditions(
-        condition: BooleanClauseList | BinaryExpression | None,
-        mappers: dict[Table, Mapper],
-        intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
-        parameters: dict[str, Any],
+    condition: BooleanClauseList | BinaryExpression | None,
+    mappers: dict[Table, Mapper],
+    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
+    parameters: dict[str, Any],
 ) -> None:
     if condition is not None:
         if hasattr(condition, "clauses"):
@@ -187,7 +188,7 @@ def _traverse_conditions(
 
 
 def _extract_mappers_from_clause(
-        clause: FromClause, table_mappers: dict[Table, Mapper]
+    clause: FromClause, table_mappers: dict[Table, Mapper]
 ) -> Generator[tuple[Mapper, FromClause], None, None]:
     if isinstance(clause, Table):
         if mapper := table_mappers.get(clause):
