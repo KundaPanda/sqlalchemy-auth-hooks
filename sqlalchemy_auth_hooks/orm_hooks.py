@@ -3,7 +3,7 @@ import asyncio
 from collections import defaultdict
 from functools import partial
 from threading import Thread
-from typing import Any, Callable, Coroutine, Generic, TypeVar
+from typing import Any, Callable, Coroutine, TypeVar
 
 import structlog
 from sqlalchemy import (
@@ -12,18 +12,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction
 from structlog.stdlib import BoundLogger
 
+from sqlalchemy_auth_hooks.common_hooks import _Hook
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.utils import _collect_entities, run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
 _O = TypeVar("_O")
-
-
-class _Hook(abc.ABC, Generic[_O]):
-    @abc.abstractmethod
-    async def run(self, handler: SQLAlchemyAuthHandler) -> None:
-        raise NotImplementedError
 
 
 class _MutationHook(_Hook[_O], abc.ABC):
