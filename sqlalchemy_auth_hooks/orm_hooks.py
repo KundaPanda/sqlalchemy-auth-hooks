@@ -22,6 +22,7 @@ from sqlalchemy.sql.selectable import Alias
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity, SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.utils import run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
@@ -75,12 +76,7 @@ class ORMHooks:
             lambda: defaultdict(list)
         )
         self._loop = asyncio.new_event_loop()
-
-        def run_loop():
-            asyncio.set_event_loop(self._loop)
-            self._loop.run_forever()
-
-        self._executor_thread = Thread(target=run_loop, daemon=True)
+        self._executor_thread = Thread(target=run_loop(self._loop), daemon=True)
         self._executor_thread.start()
 
     def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
