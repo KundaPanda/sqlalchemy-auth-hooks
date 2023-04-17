@@ -54,3 +54,10 @@ class SQLAlchemyAuthHandler(abc.ABC):
         Handle the deletion of an SQLAlchemy model.
         """
         raise NotImplementedError
+
+    @abc.abstractmethod
+    async def on_update(self, reference: ReferencedEntity, changes: dict[str, Any]) -> None:
+        """
+        Handle the deletion of an SQLAlchemy model.
+        """
+        raise NotImplementedError
