@@ -13,7 +13,7 @@ from sqlalchemy import (
     Table,
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
-from sqlalchemy.sql import operators
+from sqlalchemy.sql.operators import eq
 from sqlalchemy.sql.selectable import Alias
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
@@ -30,26 +30,37 @@ def _process_condition(
     intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
     parameters: dict[str, Any],
 ) -> None:
-    if condition.operator != operators.eq:
-        # We only care about equality conditions for now
-        return
     left = condition.left
     right = condition.right
+    if not isinstance(left, ColumnClause):
+        # We only care about conditions that involve columns
+        return
 
-    if isinstance(left, ColumnClause) and isinstance(right, BindParameter):
-        selectable = left.table
-        if isinstance(selectable, Alias):
-            table = cast(Table, selectable.element)
+    selectable = left.table
+    if isinstance(selectable, Alias):
+        table = cast(Table, selectable.element)
+    else:
+        table = cast(Table, selectable)
+    primary_key_columns = table.primary_key.columns.values()
+    if isinstance(table, Table) and (mapper := mappers.get(table)):
+        ref_entity = intermediate_result[mapper][selectable]
+        key_name = left.name
+        if isinstance(right, BindParameter):
+            key_value = right.effective_value or parameters.get(right.key)
+            if (
+                condition.operator == eq
+                and key_value is not None
+                and any(pk.key == left.key for pk in primary_key_columns)
+            ):
+                # Primary key, add to keys dict
+                ref_entity.keys[key_name] = key_value
         else:
-            table = cast(Table, selectable)
-        primary_key_columns = table.primary_key.columns.values()
-        if any(pk.key == left.key for pk in primary_key_columns):
-            if isinstance(table, Table) and (mapper := mappers.get(table)):
-                ref_entity = intermediate_result[mapper][selectable]
-                key_name = left.name
-                key_value = right.effective_value or parameters.get(right.key)
-                if key_value is not None:
-                    ref_entity.keys[key_name] = key_value
+            # Both are columns, TODO
+            return
+        ref_entity.conditions[key_name] = {
+            "operator": condition.operator,
+            "value": key_value,
+        }
 
 
 def _traverse_conditions(

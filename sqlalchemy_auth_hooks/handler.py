@@ -6,20 +6,32 @@ from sqlalchemy.orm import Mapper
 
 
 class ReferencedEntity:
-    def __init__(self, entity: Mapper, selectable: FromClause, keys: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        entity: Mapper,
+        selectable: FromClause,
+        keys: dict[str, Any] | None = None,
+        conditions: dict[Any, Any] | None = None,
+    ) -> None:
         self.entity = entity
         self.selectable = selectable
+        self.conditions = conditions or {}
         self.keys = keys or {}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ReferencedEntity):
             return NotImplemented
-        return self.entity == other.entity and (
-            len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys)
+        return (
+            self.entity == other.entity
+            and (len(self.keys) == len(other.keys) and all(self.keys[k] == other.keys[k] for k in self.keys))
+            and (
+                len(self.conditions) == len(other.conditions)
+                and all(self.conditions[k] == other.conditions[k] for k in self.conditions)
+            )
         )
 
     def __repr__(self) -> str:
-        return f"ReferencedEntity({self.entity}, {repr(self.selectable)}, {self.keys})"  # pragma: no cover
+        return f"ReferencedEntity({self.entity}, {repr(self.selectable)}, {self.keys}, {self.conditions})"  # pragma: no cover
 
 
 class SQLAlchemyAuthHandler(abc.ABC):
