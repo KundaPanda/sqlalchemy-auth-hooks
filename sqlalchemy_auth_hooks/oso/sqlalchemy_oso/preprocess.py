@@ -1,4 +1,6 @@
-"""Convert expressions from oso into a format that the SQLAlchemy translation can use."""
+"""
+Convert expressions from oso into a format that the SQLAlchemy translation can use.
+"""
 
 from collections import defaultdict
 from typing import Dict, List, Optional, Union

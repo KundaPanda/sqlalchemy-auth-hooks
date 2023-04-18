@@ -11,7 +11,6 @@ from sqlalchemy import (
     Join,
     Select,
     Table,
-    inspect,
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
 from sqlalchemy.sql.elements import ExpressionClauseList, UnaryExpression

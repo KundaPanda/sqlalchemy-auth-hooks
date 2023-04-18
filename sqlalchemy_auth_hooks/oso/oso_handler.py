@@ -3,7 +3,7 @@ from typing import Any, AsyncIterator
 import structlog
 from oso import Oso
 from sqlalchemy import false, inspect
-from sqlalchemy.orm import Mapper, DeclarativeMeta
+from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
 
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler

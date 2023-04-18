@@ -1,4 +1,5 @@
-"""Translate Oso Expressions into SQLAlchemy Expressions.
+"""
+Translate Oso Expressions into SQLAlchemy Expressions.
 
 This module translates between Oso Expressions that are returned from queries
 with partial variables into SQLAlchemy constraints.
