@@ -5,13 +5,10 @@ from threading import Thread
 from typing import Any, Callable, Coroutine, TypeVar
 
 from sqlalchemy import (
-    BindParameter,
     ClauseElement,
-    Column,
     Connection,
     Engine,
     ResultProxy,
-    Select,
     Update,
     event,
 )
@@ -48,9 +45,9 @@ class CoreHooks:
         execution_options: dict[str, Any],
     ) -> None:
         return
-        if isinstance(clauseelement, Select):
-            entities = _collect_entities(clauseelement)
-            handler.before_select(entities)
+        # if isinstance(clauseelement, Select):
+        #     entities = _collect_entities(clauseelement)
+        #     handler.before_select(entities)
 
     def after_execute(
         self,
@@ -62,33 +59,31 @@ class CoreHooks:
         result: ResultProxy,
     ) -> None:
         if isinstance(clauseelement, Update):
-            if "entity" not in clauseelement.entity_description:
-                # ORM update
-                return
-            entity_cls: DeclarativeMeta = clauseelement.entity_description["entity"]
-            registry = entity_cls.registry
-            table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
-            mapper = table_mappers[clauseelement.entity_description["table"]]
+            self.handle_update(clauseelement)
 
-            references = {
-                mapper: {
-                    clauseelement.entity_description["table"]: ReferencedEntity(
-                        entity=mapper,
-                        selectable=clauseelement.entity_description["table"],
-                    )
-                }
+    def handle_update(self, clause_element: ClauseElement) -> None:
+        if "entity" not in clause_element.entity_description:
+            # ORM update
+            return
+        entity_cls: DeclarativeMeta = clause_element.entity_description["entity"]
+        registry = entity_cls.registry
+        table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
+        mapper = table_mappers[clause_element.entity_description["table"]]
+
+        references = {
+            mapper: {
+                clause_element.entity_description["table"]: ReferencedEntity(
+                    entity=mapper,
+                    selectable=clause_element.entity_description["table"],
+                )
             }
-            conditions = _traverse_conditions(clauseelement.whereclause, {})
+        }
+        conditions = _traverse_conditions(clause_element.whereclause, {})
 
-            updated_data = {}
-            col: Column
-            parameter: BindParameter
-            for col, parameter in clauseelement._values.items():
-                updated_data[col.name] = parameter.value
-
-            for mapped_dict in references.values():
-                for referenced_entity in mapped_dict.values():
-                    self.call_async(self.handler.after_core_update, referenced_entity, conditions, updated_data)
+        updated_data = {col.name: parameter.value for col, parameter in clause_element._values.items()}
+        for mapped_dict in references.values():
+            for referenced_entity in mapped_dict.values():
+                self.call_async(self.handler.after_core_update, referenced_entity, conditions, updated_data)
 
 
 def _register_core_hooks(handler: SQLAlchemyAuthHandler) -> None:
