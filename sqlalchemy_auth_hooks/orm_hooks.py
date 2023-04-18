@@ -3,18 +3,18 @@ import asyncio
 from collections import defaultdict
 from functools import partial
 from threading import Thread
-from typing import Any, Callable, Coroutine, TypeVar
+from typing import Any, Callable, Coroutine, TypeVar, cast
 
 import structlog
 from sqlalchemy import (
     event,
 )
-from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction
+from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction, with_loader_criteria
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.common_hooks import _Hook
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
-from sqlalchemy_auth_hooks.session import check_skip
+from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
 from sqlalchemy_auth_hooks.utils import _collect_entities, run_loop
 
 logger: BoundLogger = structlog.get_logger()
@@ -125,7 +125,16 @@ class ORMHooks:
             return
         if orm_execute_state.is_select:
             entities, conditions = _collect_entities(orm_execute_state)
-            self.call_async(self.handler.on_select, entities, conditions)
+
+            async def prepare_filters() -> None:
+                async for selectable, filter_exp in self.handler.on_select(
+                    cast(AuthorizedSession, orm_execute_state.session), entities, conditions
+                ):
+                    where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
+                    orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
+
+            self.call_async(prepare_filters)
+            return
 
 
 def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:

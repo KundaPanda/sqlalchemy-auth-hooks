@@ -11,9 +11,10 @@ from sqlalchemy import (
     Join,
     Select,
     Table,
+    inspect,
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
-from sqlalchemy.sql.elements import ExpressionClauseList
+from sqlalchemy.sql.elements import ExpressionClauseList, UnaryExpression
 from sqlalchemy.sql.operators import and_, eq, ne
 from sqlalchemy.sql.selectable import Alias
 
@@ -31,9 +32,11 @@ def run_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 
 def _process_condition(
-    condition: BinaryExpression,
+    condition: BinaryExpression | UnaryExpression,
     parameters: dict[str, Any],
 ) -> ReferenceConditions | None:
+    if isinstance(condition, UnaryExpression):
+        return
     left = condition.left
     right = condition.right
     if not isinstance(left, ColumnClause):

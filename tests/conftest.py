@@ -1,16 +1,17 @@
 import pytest
 from pytest_mock import MockerFixture
-from sqlalchemy import ForeignKey, create_engine, delete
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import ForeignKey, create_engine, delete, true
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, Session, backref, declarative_base, mapped_column, relationship
 
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import (
+    AuthorizedAsyncSession,
+    AuthorizedSession,
     UnauthorizedAsyncSession,
     UnauthorizedSession,
-    AuthorizedSession,
-    AuthorizedAsyncSession,
 )
 
 Base = declarative_base()
@@ -53,7 +54,27 @@ def authorized_async_session(async_engine, auth_user):
 
 @pytest.fixture
 def auth_handler(engine, mocker: MockerFixture):
+    class AsyncIterator:
+        def __init__(
+            self, session: Session, references: list[ReferencedEntity], conditions: ReferenceConditions | None
+        ):
+            self.session = session
+            self.references = references
+            self.conditions = conditions
+            self.pos = 0
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self.pos >= len(self.references):
+                raise StopAsyncIteration
+            val = self.references[self.pos]
+            self.pos += 1
+            return val.entity, true()
+
     test_handler = mocker.Mock(spec=SQLAlchemyAuthHandler)
+    test_handler.on_select.side_effect = AsyncIterator
     register_hooks(test_handler)
     yield test_handler
 

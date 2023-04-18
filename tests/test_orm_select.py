@@ -15,6 +15,7 @@ def test_simple_get(engine, add_user, auth_handler, authorized_session):
     mapper = inspect(User)
     selectable = User.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -31,6 +32,7 @@ def test_simple_select(engine, add_user, auth_handler, authorized_session):
     mapper = inspect(User)
     selectable = User.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -47,6 +49,7 @@ def test_simple_select_where(engine, add_user, auth_handler, authorized_session)
     mapper = inspect(User)
     selectable = User.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -63,6 +66,7 @@ def test_simple_select_column_only(engine, add_user, auth_handler, authorized_se
     mapper = inspect(User)
     selectable = User.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -79,6 +83,7 @@ def test_select_multiple_pk(engine, add_user, user_group, auth_handler, authoriz
     mapper = inspect(UserGroup)
     selectable = UserGroup.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -101,6 +106,7 @@ def test_select_get(engine, add_user, user_group, auth_handler, authorized_sessi
     mapper = inspect(UserGroup)
     selectable = UserGroup.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
@@ -123,6 +129,7 @@ def test_select_multiple_conditions(engine, add_user, user_group, auth_handler, 
     mapper = inspect(User)
     selectable = User.__table__
     auth_handler.on_select.assert_called_once_with(
+        authorized_session,
         [
             ReferencedEntity(
                 entity=mapper,
