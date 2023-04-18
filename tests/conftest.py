@@ -24,7 +24,10 @@ def anyio_backend():
 
 @pytest.fixture(scope="session")
 def auth_user():
-    return "AuthUser"
+    class AuthUser:
+        pass
+
+    return AuthUser
 
 
 @pytest.fixture(scope="session", autouse=True)
