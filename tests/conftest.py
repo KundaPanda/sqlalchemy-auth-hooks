@@ -74,7 +74,7 @@ def auth_handler(engine, mocker: MockerFixture):
             return val.entity, true()
 
     test_handler = mocker.Mock(spec=SQLAlchemyAuthHandler)
-    test_handler.on_select.side_effect = AsyncIterator
+    test_handler.before_select.side_effect = AsyncIterator
     register_hooks(test_handler)
     yield test_handler
 

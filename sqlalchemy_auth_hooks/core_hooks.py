@@ -50,7 +50,7 @@ class CoreHooks:
         return
         if isinstance(clauseelement, Select):
             entities = _collect_entities(clauseelement)
-            handler.on_select(entities)
+            handler.before_select(entities)
 
     def after_execute(
         self,
@@ -88,7 +88,7 @@ class CoreHooks:
 
             for mapped_dict in references.values():
                 for referenced_entity in mapped_dict.values():
-                    self.call_async(self.handler.on_update, referenced_entity, conditions, updated_data)
+                    self.call_async(self.handler.after_core_update, referenced_entity, conditions, updated_data)
 
 
 def _register_core_hooks(handler: SQLAlchemyAuthHandler) -> None:

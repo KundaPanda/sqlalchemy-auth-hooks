@@ -33,13 +33,13 @@ class _MutationHook(_Hook[_O], abc.ABC):
 class _CreateHook(_MutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Create hook called")
-        await handler.on_single_create(session, self.state.object)
+        await handler.after_single_create(session, self.state.object)
 
 
 class _DeleteHook(_MutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Delete hook called")
-        await handler.on_single_delete(session, self.state.object)
+        await handler.after_single_delete(session, self.state.object)
 
 
 class _UpdateHook(_MutationHook[_O]):
@@ -49,7 +49,7 @@ class _UpdateHook(_MutationHook[_O]):
 
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Update hook called")
-        await handler.on_single_update(session, self.state.object, self.changes)
+        await handler.after_single_update(session, self.state.object, self.changes)
 
 
 T = TypeVar("T")
@@ -127,7 +127,7 @@ class ORMHooks:
             entities, conditions = _collect_entities(orm_execute_state)
 
             async def prepare_filters() -> None:
-                async for selectable, filter_exp in self.handler.on_select(
+                async for selectable, filter_exp in self.handler.before_select(
                     cast(AuthorizedSession, orm_execute_state.session), entities, conditions
                 ):
                     where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
