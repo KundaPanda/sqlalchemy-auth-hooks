@@ -113,8 +113,8 @@ class ORMHooks:
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if orm_execute_state.is_select:
-            entities = _collect_entities(orm_execute_state)
-            self.call_async(self.handler.on_select, entities)
+            entities, conditions = _collect_entities(orm_execute_state)
+            self.call_async(self.handler.on_select, entities, conditions)
 
 
 def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:

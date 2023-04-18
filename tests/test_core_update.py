@@ -1,8 +1,9 @@
-from sqlalchemy import inspect, update, func
+from sqlalchemy import inspect, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.operators import eq, startswith_op
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceConditions
 from tests.conftest import User
 
 
@@ -10,13 +11,13 @@ def test_update(engine, auth_handler, add_user):
     with Session(engine) as session:
         session.execute(update(User).where(User.id == add_user.id).values(name="John"))
         session.commit()
+    selectable = User.__table__
     auth_handler.on_update.assert_called_once_with(
         ReferencedEntity(
             entity=inspect(User),
-            keys={"id": add_user.id},
-            selectable=User.__table__,
-            conditions={"id": {"operator": eq, "value": add_user.id}},
+            selectable=selectable,
         ),
+        ReferenceConditions(selectable, {"id": {"operator": eq, "value": 1}}),
         {"name": "John"},
     )
 
@@ -27,6 +28,7 @@ def test_update_all(engine, auth_handler, add_user):
         session.commit()
     auth_handler.on_update.assert_called_once_with(
         ReferencedEntity(entity=inspect(User), selectable=User.__table__),
+        None,
         {"name": "John", "age": 10},
     )
 
@@ -35,11 +37,12 @@ def test_update_condition(engine, auth_handler, add_user):
     with Session(engine) as session:
         session.execute(update(User).where(User.name.startswith("J")).values(name="John", age=10))
         session.commit()
+    selectable = User.__table__
     auth_handler.on_update.assert_called_once_with(
         ReferencedEntity(
             entity=inspect(User),
-            selectable=User.__table__,
-            conditions={"name": {"operator": startswith_op, "value": "J"}},
+            selectable=selectable,
         ),
+        ReferenceConditions(selectable, {"name": {"operator": startswith_op, "value": "J"}}),
         {"name": "John", "age": 10},
     )

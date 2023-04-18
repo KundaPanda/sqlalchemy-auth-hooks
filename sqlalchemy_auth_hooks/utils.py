@@ -13,10 +13,16 @@ from sqlalchemy import (
     Table,
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
-from sqlalchemy.sql.operators import eq
+from sqlalchemy.sql.elements import ExpressionClauseList
+from sqlalchemy.sql.operators import eq, ne, and_
 from sqlalchemy.sql.selectable import Alias
 
-from sqlalchemy_auth_hooks.handler import ReferencedEntity
+from sqlalchemy_auth_hooks.references import (
+    CompositeConditions,
+    EntityConditions,
+    ReferenceConditions,
+    ReferencedEntity,
+)
 
 
 def run_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -26,55 +32,48 @@ def run_loop(loop: asyncio.AbstractEventLoop) -> None:
 
 def _process_condition(
     condition: BinaryExpression,
-    mappers: dict[Table, Mapper],
-    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
     parameters: dict[str, Any],
-) -> None:
+) -> ReferenceConditions | None:
     left = condition.left
     right = condition.right
     if not isinstance(left, ColumnClause):
-        # We only care about conditions that involve columns
-        return
+        if isinstance(right, ColumnClause) and condition.operator in (eq, ne):
+            left, right = right, left
+        else:
+            # We only care about conditions that involve columns
+            return None
 
     selectable = left.table
     if isinstance(selectable, Alias):
         table = cast(Table, selectable.element)
     else:
         table = cast(Table, selectable)
-    primary_key_columns = table.primary_key.columns.values()
-    if isinstance(table, Table) and (mapper := mappers.get(table)):
-        ref_entity = intermediate_result[mapper][selectable]
-        key_name = left.name
+    if isinstance(table, Table):
         if isinstance(right, BindParameter):
             key_value = right.effective_value or parameters.get(right.key)
-            if (
-                condition.operator == eq
-                and key_value is not None
-                and any(pk.key == left.key for pk in primary_key_columns)
-            ):
-                # Primary key, add to keys dict
-                ref_entity.keys[key_name] = key_value
+            key_name = left.name
+            return ReferenceConditions(
+                selectable=selectable,
+                conditions={key_name: {"operator": condition.operator, "value": key_value}},
+            )
         else:
             # Both are columns, TODO
             return
-        ref_entity.conditions[key_name] = {
-            "operator": condition.operator,
-            "value": key_value,
-        }
 
 
 def _traverse_conditions(
     condition: BooleanClauseList | BinaryExpression | None,
-    mappers: dict[Table, Mapper],
-    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]],
     parameters: dict[str, Any],
-) -> None:
-    if condition is not None:
-        if hasattr(condition, "clauses"):
-            for child in condition.clauses:
-                _traverse_conditions(child, mappers, intermediate_result, parameters)
-        else:
-            _process_condition(condition, mappers, intermediate_result, parameters)
+) -> EntityConditions | None:
+    if condition is None:
+        return None
+
+    if not isinstance(condition, ExpressionClauseList):
+        return _process_condition(condition, parameters)
+    conditions = CompositeConditions(conditions=[], operator=condition.operator)
+    for child in condition.clauses:
+        conditions.conditions.append(_traverse_conditions(child, parameters))
+    return conditions
 
 
 def _extract_mappers_from_clause(
@@ -90,11 +89,11 @@ def _extract_mappers_from_clause(
         yield next(_extract_mappers_from_clause(clause.element, table_mappers))[0], clause.selectable
 
 
-def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
+def _collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityConditions | None]:
     intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]] = defaultdict(dict)
 
     if not isinstance(state.statement, Select):
-        return []
+        return [], None
     select_statement = state.statement
 
     # Extract mappers from the FROM clause
@@ -102,12 +101,29 @@ def _collect_entities(state: ORMExecuteState) -> list[ReferencedEntity]:
     froms = select_statement.get_final_froms()
     table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
 
+    all_conditions = []
     for from_clause in froms:
+        if isinstance(from_clause, Join) and isinstance(from_clause.onclause, ExpressionClauseList):
+            for clause in from_clause.onclause.clauses:
+                condition = _traverse_conditions(clause, state.parameters or {})
+                if condition is not None:
+                    all_conditions.append(condition)
+
         for mapper, selectable in _extract_mappers_from_clause(from_clause, table_mappers):
-            intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable, keys={})
+            intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable)
 
     # Extract primary key conditions from the WHERE clause, if any
     where_clause = select_statement.whereclause
-    _traverse_conditions(where_clause, table_mappers, intermediate_result, state.parameters or {})
+    where_conditions = _traverse_conditions(where_clause, state.parameters or {})
 
-    return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()]
+    if where_conditions is not None:
+        all_conditions.append(where_conditions)
+
+    if len(all_conditions) == 1:
+        conditions = all_conditions[0]
+    elif not all_conditions:
+        conditions = None
+    else:
+        conditions = CompositeConditions(conditions=all_conditions, operator=and_)
+
+    return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()], conditions

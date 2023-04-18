@@ -78,7 +78,7 @@ class CoreHooks:
                     )
                 }
             }
-            _traverse_conditions(clauseelement.whereclause, table_mappers, references, {})
+            conditions = _traverse_conditions(clauseelement.whereclause, {})
 
             updated_data = {}
             col: Column
@@ -88,7 +88,7 @@ class CoreHooks:
 
             for mapped_dict in references.values():
                 for referenced_entity in mapped_dict.values():
-                    self.call_async(self.handler.on_update, referenced_entity, updated_data)
+                    self.call_async(self.handler.on_update, referenced_entity, conditions, updated_data)
 
 
 def _register_core_hooks(handler: SQLAlchemyAuthHandler) -> None:

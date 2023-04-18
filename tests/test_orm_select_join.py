@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from sqlalchemy.sql.operators import eq, in_op
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceConditions
 from tests.conftest import Group, User, UserGroup
 
 
@@ -15,7 +16,8 @@ def test_join(engine, add_user, user_group, auth_handler):
             ReferencedEntity(entity=inspect(User), selectable=User.__table__),
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
-        ]
+        ],
+        None,
     )
 
 
@@ -31,24 +33,30 @@ def test_join_with_where(engine, add_user, user_group, auth_handler):
             ),
             ReferencedEntity(
                 entity=inspect(Group),
-                keys={"id": 1},
                 selectable=Group.__table__,
-                conditions={"id": {"operator": eq, "value": 1}},
             ),
-        ]
+        ],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"id": {"operator": eq, "value": 1}},
+        ),
     )
 
 
 def test_join_with_condition(engine, add_user, user_group, auth_handler):
     with Session(engine) as session:
-        session.execute(select(User).join(User.groups).join(UserGroup.group.and_(Group.id == 1)))
+        session.scalar(select(User).join(User.groups).join(UserGroup.group.and_(Group.id == 1)))
     # Although the condition is on the join, treat it as without a condition for now
     auth_handler.on_select.assert_called_once_with(
         [
             ReferencedEntity(entity=inspect(User), selectable=User.__table__),
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
-        ]
+        ],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"id": {"operator": eq, "value": 1}},
+        ),
     )
 
 
@@ -62,13 +70,20 @@ def test_join_recursive(engine, add_user, user_group, auth_handler):
         alias = aliased(Group)
         session.execute(select(Group).join(Group.subgroups.of_type(alias)))
     # Called when adding the subgroup
-    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)])
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"parent_group_id": {"operator": eq, "value": 1}},
+        ),
+    )
     # Select itself
     auth_handler.on_select.assert_called_with(
         [
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
-            ReferencedEntity(entity=inspect(Group), selectable=alias),
-        ]
+            ReferencedEntity(entity=inspect(Group), selectable=inspect(alias).selectable),
+        ],
+        None,
     )
 
 
@@ -82,15 +97,26 @@ def test_join_recursive_with_condition(engine, add_user, user_group, auth_handle
         alias = aliased(Group)
         session.execute(select(Group).join(Group.subgroups.of_type(alias)).where(alias.id == 2))
     # Called when adding the subgroup
-    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)])
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(Group), selectable=Group.__table__)],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"parent_group_id": {"operator": eq, "value": 1}},
+        ),
+    )
     # The select itself
     auth_handler.on_select.assert_called_with(
         [
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
             ReferencedEntity(
-                entity=inspect(Group), selectable=alias, keys={"id": 2}, conditions={"id": {"operator": eq, "value": 2}}
+                entity=inspect(Group),
+                selectable=inspect(alias).selectable,
             ),
-        ]
+        ],
+        ReferenceConditions(
+            selectable=inspect(alias).selectable,
+            conditions={"id": {"operator": eq, "value": 2}},
+        ),
     )
 
 
@@ -98,17 +124,22 @@ def test_join_selectinload(engine, add_user, user_group, auth_handler):
     with Session(engine) as session:
         session.execute(select(User).options(selectinload(User.groups).selectinload(UserGroup.group))).all()
     # First, the user table is queried
-    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(User), selectable=User.__table__)])
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(User), selectable=User.__table__)],
+        None,
+    )
     # Then, a selectinload is performed on the user-groups
     auth_handler.on_select.assert_any_call(
         [
             ReferencedEntity(
                 entity=inspect(UserGroup),
                 selectable=UserGroup.__table__,
-                keys={},
-                conditions={"user_id": {"operator": in_op, "value": [1]}},
             )
-        ]
+        ],
+        ReferenceConditions(
+            selectable=UserGroup.__table__,
+            conditions={"user_id": {"operator": in_op, "value": [1]}},
+        ),
     )
     # Finally, a selectinload is performed on the groups as well
     auth_handler.on_select.assert_any_call(
@@ -116,10 +147,12 @@ def test_join_selectinload(engine, add_user, user_group, auth_handler):
             ReferencedEntity(
                 entity=inspect(Group),
                 selectable=Group.__table__,
-                keys={},
-                conditions={"id": {"operator": in_op, "value": [1]}},
             )
-        ]
+        ],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"id": {"operator": in_op, "value": [1]}},
+        ),
     )
 
 
@@ -145,9 +178,16 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler):
         _ = user.groups
         _ = user.groups[0].group.name
     assert auth_handler.on_select.call_count == 3
-    auth_handler.on_select.assert_any_call([ReferencedEntity(entity=inspect(User), selectable=User.__table__)])
     auth_handler.on_select.assert_any_call(
-        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)]
+        [ReferencedEntity(entity=inspect(User), selectable=User.__table__)],
+        None,
+    )
+    auth_handler.on_select.assert_any_call(
+        [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)],
+        ReferenceConditions(
+            selectable=UserGroup.__table__,
+            conditions={"user_id": {"operator": eq, "value": 1}},
+        ),
     )
     # Only one group should be queried
     auth_handler.on_select.assert_called_with(
@@ -155,10 +195,12 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler):
             ReferencedEntity(
                 entity=inspect(Group),
                 selectable=Group.__table__,
-                keys={"id": 1},
-                conditions={"id": {"operator": eq, "value": 1}},
             )
-        ]
+        ],
+        ReferenceConditions(
+            selectable=Group.__table__,
+            conditions={"id": {"operator": eq, "value": 1}},
+        ),
     )
 
 
@@ -170,5 +212,6 @@ async def test_join_async(anyio_backend, async_engine, add_user_async, user_grou
             ReferencedEntity(entity=inspect(User), selectable=User.__table__),
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
-        ]
+        ],
+        None,
     )
