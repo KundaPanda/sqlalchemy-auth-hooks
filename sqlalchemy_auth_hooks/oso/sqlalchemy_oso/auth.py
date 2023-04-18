@@ -59,8 +59,8 @@ def authorize_model(oso: Oso, actor: object, action: str, session: Session, mode
     def get_field_type(model, field):
         try:
             field = getattr(model, field)
-        except AttributeError:
-            raise PolarRuntimeError(f"Cannot get property {field} on {model}.")
+        except AttributeError as e:
+            raise PolarRuntimeError(f"Cannot get property {field} on {model}.") from e
 
         try:
             return field.entity.class_
@@ -71,8 +71,8 @@ def authorize_model(oso: Oso, actor: object, action: str, session: Session, mode
 
     try:
         mapped_class = inspect(model, raiseerr=True).class_
-    except AttributeError:
-        raise TypeError(f"Expected a model; received: {model}")
+    except AttributeError as e:
+        raise TypeError(f"Expected a model; received: {model}") from e
 
     user_type = oso.host.types.get(mapped_class)
     model_name = (
@@ -100,7 +100,7 @@ def authorize_model(oso: Oso, actor: object, action: str, session: Session, mode
         if isinstance(resource_partial, model):
 
             def f(pk):
-                return getattr(model, pk) == getattr(resource_partial, pk)
+                return getattr(model, pk) == getattr(resource_partial, pk)  # noqa: B023
 
             filters = [f(pk.name) for pk in inspect(model).primary_key]
             filter = reduce(lambda a, b: a & b, filters)

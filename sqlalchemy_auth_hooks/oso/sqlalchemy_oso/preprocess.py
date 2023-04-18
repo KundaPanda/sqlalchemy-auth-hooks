@@ -54,9 +54,8 @@ def preprocess_expression(expression: Expression, variables: TGroupedExpressions
 def preprocess_and(expression: Expression, variables: TGroupedExpressions) -> Expression:
     new_expression = []
 
-    for expression in expression.args:
-        maybe_expr = preprocess_expression(expression, variables)
-        if maybe_expr:
+    for expression_arg in expression.args:
+        if maybe_expr := preprocess_expression(expression_arg, variables):
             new_expression.append(maybe_expr)
 
     return Expression("And", new_expression)

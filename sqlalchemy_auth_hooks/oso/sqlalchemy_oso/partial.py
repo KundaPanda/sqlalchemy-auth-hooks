@@ -149,8 +149,8 @@ def translate_and(expression: Expression, session: Session, model, get_model):
     """
     assert expression.operator == "And"
     expr = sql.true()
-    for expression in expression.args:
-        translated = translate_expr(expression, session, model, get_model)
+    for expression_arg in expression.args:
+        translated = translate_expr(expression_arg, session, model, get_model)
         expr = and_filter(expr, translated)
 
     return expr
