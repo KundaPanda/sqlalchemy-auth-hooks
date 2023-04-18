@@ -57,7 +57,7 @@ def _process_condition(
                 conditions={key_name: {"operator": condition.operator, "value": key_value}},
             )
         else:
-            # Both are columns, TODO
+            # Both are columns, not interesting
             return
 
 
