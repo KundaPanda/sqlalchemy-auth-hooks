@@ -14,7 +14,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
 from sqlalchemy.sql.elements import ExpressionClauseList
-from sqlalchemy.sql.operators import eq, ne, and_
+from sqlalchemy.sql.operators import and_, eq, ne
 from sqlalchemy.sql.selectable import Alias
 
 from sqlalchemy_auth_hooks.references import (

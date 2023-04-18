@@ -1,15 +1,15 @@
 from sqlalchemy import inspect, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, aliased, joinedload, selectinload
+from sqlalchemy.orm import aliased, joinedload, selectinload
 from sqlalchemy.sql.operators import eq, in_op
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from sqlalchemy_auth_hooks.references import ReferenceConditions
+from sqlalchemy_auth_hooks.session import AuthorizedAsyncSession, AuthorizedSession
 from tests.conftest import Group, User, UserGroup
 
 
-def test_join(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.execute(select(User).join(User.groups).join(UserGroup.group))
     auth_handler.on_select.assert_called_once_with(
         [
@@ -21,8 +21,8 @@ def test_join(engine, add_user, user_group, auth_handler):
     )
 
 
-def test_join_with_where(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_with_where(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.execute(select(User).join(User.groups).join(UserGroup.group).where(Group.id == 1))
     auth_handler.on_select.assert_called_once_with(
         [
@@ -43,8 +43,8 @@ def test_join_with_where(engine, add_user, user_group, auth_handler):
     )
 
 
-def test_join_with_condition(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_with_condition(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.scalar(select(User).join(User.groups).join(UserGroup.group.and_(Group.id == 1)))
     # Although the condition is on the join, treat it as without a condition for now
     auth_handler.on_select.assert_called_once_with(
@@ -60,8 +60,8 @@ def test_join_with_condition(engine, add_user, user_group, auth_handler):
     )
 
 
-def test_join_recursive(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_recursive(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.add(user_group)
         group = Group(name="Test Users 2")
         user_group.subgroups.append(group)
@@ -87,8 +87,8 @@ def test_join_recursive(engine, add_user, user_group, auth_handler):
     )
 
 
-def test_join_recursive_with_condition(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_recursive_with_condition(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.add(user_group)
         group = Group(name="Test Users 2")
         user_group.subgroups.append(group)
@@ -120,8 +120,8 @@ def test_join_recursive_with_condition(engine, add_user, user_group, auth_handle
     )
 
 
-def test_join_selectinload(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_selectinload(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.execute(select(User).options(selectinload(User.groups).selectinload(UserGroup.group))).all()
     # First, the user table is queried
     auth_handler.on_select.assert_any_call(
@@ -156,8 +156,8 @@ def test_join_selectinload(engine, add_user, user_group, auth_handler):
     )
 
 
-def test_join_joinedload(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_joinedload(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         session.execute(select(User).options(joinedload(User.groups).joinedload(UserGroup.group))).unique().all()
     # All should be queried at once
     auth_handler.on_select.assert_called_once()
@@ -172,8 +172,8 @@ def test_join_joinedload(engine, add_user, user_group, auth_handler):
     assert auth_handler.on_select.call_args_list[0].args[0][2].selectable.original == Group.__table__
 
 
-def test_join_lazyload(engine, add_user, user_group, auth_handler):
-    with Session(engine) as session:
+def test_join_lazyload(engine, add_user, user_group, auth_handler, authorized_session):
+    with authorized_session as session:
         user: User = session.scalar(select(User).limit(1))
         _ = user.groups
         _ = user.groups[0].group.name
@@ -204,8 +204,10 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler):
     )
 
 
-async def test_join_async(anyio_backend, async_engine, add_user_async, user_group_async, auth_handler):
-    async with AsyncSession(async_engine) as session:
+async def test_join_async(
+    anyio_backend, async_engine, add_user_async, user_group_async, auth_handler, authorized_async_session
+):
+    async with authorized_async_session as session:
         await session.execute(select(User).join(User.groups).join(UserGroup.group))
     auth_handler.on_select.assert_called_once_with(
         [

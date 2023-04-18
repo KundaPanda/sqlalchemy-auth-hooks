@@ -14,6 +14,7 @@ from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.common_hooks import _Hook
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.session import check_skip
 from sqlalchemy_auth_hooks.utils import _collect_entities, run_loop
 
 logger: BoundLogger = structlog.get_logger()
@@ -75,6 +76,8 @@ class ORMHooks:
 
     def after_flush(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush")
+        if check_skip(session):
+            return
         for _mapper, states in flush_context.mappers.items():
             for state in states:
                 if state.modified and state.has_identity and state.is_instance:
@@ -84,6 +87,8 @@ class ORMHooks:
 
     def after_flush_postexec(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush_postexec")
+        if check_skip(session):
+            return
         for _mapper, states in flush_context.mappers.items():
             for state in states:
                 if not state.deleted and not state.detached and state.has_identity and state.is_instance:
@@ -95,6 +100,8 @@ class ORMHooks:
 
     def after_commit(self, session: Session) -> None:
         logger.debug("after_commit")
+        if check_skip(session):
+            return
         if session not in self._pending_hooks:
             logger.debug("No tracked session states to process")
             return
@@ -105,6 +112,8 @@ class ORMHooks:
 
     def after_rollback(self, session: Session) -> None:
         logger.debug("after_rollback")
+        if check_skip(session):
+            return
         if session not in self._pending_hooks:
             logger.debug("No tracked session states to process")
             return
@@ -112,6 +121,8 @@ class ORMHooks:
 
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
+        if check_skip(orm_execute_state.session):
+            return
         if orm_execute_state.is_select:
             entities, conditions = _collect_entities(orm_execute_state)
             self.call_async(self.handler.on_select, entities, conditions)
