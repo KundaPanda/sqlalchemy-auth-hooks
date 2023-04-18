@@ -30,6 +30,13 @@ anyio = "^3.6.2"
 aiosqlite = "^0.18.0"
 
 
+[tool.poetry.group.oso]
+optional = true
+
+[tool.poetry.group.oso.dependencies]
+oso = "^0.27.0"
+polar = "^0.0.118"
+
 [tool.black]
 line-length = 120
 target-version = ['py310', 'py311']
