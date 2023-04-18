@@ -6,7 +6,7 @@ def test_delete(engine, add_user, auth_handler, authorized_session):
         u = session.get(User, add_user.id)
         session.delete(u)
         session.commit()
-    auth_handler.on_single_delete.assert_called_once_with(u)
+    auth_handler.on_single_delete.assert_called_once_with(authorized_session, u)
 
 
 def test_delete_rollback(engine, add_user, auth_handler, authorized_session):

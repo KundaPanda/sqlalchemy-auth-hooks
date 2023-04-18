@@ -31,15 +31,15 @@ class _MutationHook(_Hook[_O], abc.ABC):
 
 
 class _CreateHook(_MutationHook[_O]):
-    async def run(self, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Create hook called")
-        await handler.on_single_create(self.state.object)
+        await handler.on_single_create(session, self.state.object)
 
 
 class _DeleteHook(_MutationHook[_O]):
-    async def run(self, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Delete hook called")
-        await handler.on_single_delete(self.state.object)
+        await handler.on_single_delete(session, self.state.object)
 
 
 class _UpdateHook(_MutationHook[_O]):
@@ -47,9 +47,9 @@ class _UpdateHook(_MutationHook[_O]):
         super().__init__(state)
         self.changes = changes
 
-    async def run(self, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Update hook called")
-        await handler.on_single_update(self.state.object, self.changes)
+        await handler.on_single_update(session, self.state.object, self.changes)
 
 
 T = TypeVar("T")
@@ -107,7 +107,7 @@ class ORMHooks:
             return
         for pending_instance_key in self._pending_hooks[session]:
             for hook in self._pending_hooks[session][pending_instance_key]:
-                self.call_async(hook.run, self.handler)
+                self.call_async(hook.run, session, self.handler)
         del self._pending_hooks[session]
 
     def after_rollback(self, session: Session) -> None:

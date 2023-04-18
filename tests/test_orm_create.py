@@ -10,7 +10,7 @@ def test_create_session(engine, auth_handler, authorized_session):
         session.add(user)
         session.commit()
         assert user.id is not None
-        auth_handler.on_single_create.assert_called_once_with(user)
+        auth_handler.on_single_create.assert_called_once_with(authorized_session, user)
 
 
 def test_create_rollback(engine, auth_handler, authorized_session):
