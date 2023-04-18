@@ -1,8 +1,12 @@
+import logging
+
 import pytest
+import structlog
 from pytest_mock import MockerFixture
 from sqlalchemy import ForeignKey, create_engine, delete, true
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapped, Session, backref, declarative_base, mapped_column, relationship
+from structlog.dev import ConsoleRenderer
 
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
@@ -13,6 +17,27 @@ from sqlalchemy_auth_hooks.session import (
     UnauthorizedAsyncSession,
     UnauthorizedSession,
 )
+
+logging.basicConfig(level=logging.DEBUG)
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        ConsoleRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+logging.getLogger("aiosqlite").setLevel(logging.INFO)
+logging.getLogger("asyncio").setLevel(logging.INFO)
 
 Base = declarative_base()
 

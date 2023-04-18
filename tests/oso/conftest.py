@@ -5,13 +5,14 @@ from oso import Oso
 
 from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.oso.oso_handler import OsoHandler
-from tests.conftest import User
+from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import register_models
+from tests.conftest import Base, User
 
 
 @pytest.fixture(scope="session")
 def oso(auth_user):
     oso = Oso()
-    oso.register_class(User)
+    register_models(oso, Base)
     oso.register_class(auth_user)
     base_path = Path(__file__).parent
     oso.load_files([base_path / "assets/authorization.polar"])
