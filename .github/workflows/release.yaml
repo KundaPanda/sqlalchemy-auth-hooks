@@ -8,7 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 5
+          ssh-key: ${{ secrets.SSH_KEY }}
+
 
       - name: Install python
         uses: actions/setup-python@v2
