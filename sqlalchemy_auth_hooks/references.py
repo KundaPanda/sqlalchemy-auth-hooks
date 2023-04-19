@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import FromClause, ReturnsRows, Alias
+from sqlalchemy import Alias, FromClause, ReturnsRows
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.operators import OperatorType
 

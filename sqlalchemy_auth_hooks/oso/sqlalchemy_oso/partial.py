@@ -84,10 +84,10 @@ from polar.expression import Expression
 from polar.partial import dot_path
 from polar.variable import Variable
 from sqlalchemy import inspect
-from sqlalchemy.orm import RelationshipProperty, InstrumentedAttribute, Mapper
+from sqlalchemy.orm import InstrumentedAttribute, Mapper, RelationshipProperty
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import expression as sql
-from sqlalchemy.sql.elements import True_, ColumnElement, False_, BooleanClauseList, BinaryExpression
+from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList, ColumnElement, False_, True_
 
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.preprocess import preprocess
 

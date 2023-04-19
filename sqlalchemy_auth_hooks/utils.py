@@ -112,6 +112,40 @@ def _extract_mappers_from_clause(
         yield next(_extract_mappers_from_clause(clause.element, table_mappers))[0], clause.selectable
 
 
+def process_clauses(
+    froms: Sequence[FromClause],
+    intermediate_result: dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]],
+    where_clause: Any,
+    parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]],
+    table_mappers: dict[FromClause, Mapper[Any]],
+) -> tuple[dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]], EntityConditions | None]:
+    all_conditions: list[EntityConditions] = []
+    for from_clause in froms:
+        if isinstance(from_clause, Join) and isinstance(from_clause.onclause, ExpressionClauseList):
+            for clause in from_clause.onclause.clauses:
+                condition = traverse_conditions(clause, parameters)
+                if condition is not None:
+                    all_conditions.append(condition)
+
+        for mapper, selectable in _extract_mappers_from_clause(from_clause, table_mappers):
+            intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable)
+
+    # Extract primary key conditions from the WHERE clause, if any
+    where_conditions = traverse_conditions(where_clause, parameters)
+
+    if where_conditions is not None:
+        all_conditions.append(where_conditions)
+
+    if len(all_conditions) == 1:
+        conditions = all_conditions[0]
+    elif not all_conditions:
+        conditions = None
+    else:
+        conditions = CompositeConditions(conditions=all_conditions, operator=and_)
+
+    return intermediate_result, conditions
+
+
 def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityConditions | None]:
     intermediate_result: dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]] = defaultdict(dict)
 
@@ -127,29 +161,12 @@ def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], En
     froms = select_statement.get_final_froms()
     table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
 
-    all_conditions: list[EntityConditions] = []
-    for from_clause in froms:
-        if isinstance(from_clause, Join) and isinstance(from_clause.onclause, ExpressionClauseList):
-            for clause in from_clause.onclause.clauses:
-                condition = traverse_conditions(clause, state.parameters or {})
-                if condition is not None:
-                    all_conditions.append(condition)
+    results, conditions = process_clauses(
+        froms,
+        intermediate_result,
+        select_statement.whereclause,
+        state.parameters or {},
+        table_mappers,
+    )
 
-        for mapper, selectable in _extract_mappers_from_clause(from_clause, table_mappers):
-            intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable)
-
-    # Extract primary key conditions from the WHERE clause, if any
-    where_clause = select_statement.whereclause
-    where_conditions = traverse_conditions(where_clause, state.parameters or {})
-
-    if where_conditions is not None:
-        all_conditions.append(where_conditions)
-
-    if len(all_conditions) == 1:
-        conditions = all_conditions[0]
-    elif not all_conditions:
-        conditions = None
-    else:
-        conditions = CompositeConditions(conditions=all_conditions, operator=and_)
-
-    return [entity for mapper in intermediate_result for entity in intermediate_result[mapper].values()], conditions
+    return [entity for mapper_ref in results.values() for entity in mapper_ref.values()], conditions
