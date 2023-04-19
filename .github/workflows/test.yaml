@@ -49,7 +49,7 @@ jobs:
         run: |
           source .venv/bin/activate
           black . --check
-          ruff
+          ruff .
 
       - name: Run pyright
         uses: jakebailey/pyright-action@v1
