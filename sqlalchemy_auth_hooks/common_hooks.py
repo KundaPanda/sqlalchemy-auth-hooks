@@ -10,4 +10,4 @@ _O = TypeVar("_O")
 class _Hook(abc.ABC, Generic[_O]):
     @abc.abstractmethod
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover

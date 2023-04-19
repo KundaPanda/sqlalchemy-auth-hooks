@@ -1,5 +1,5 @@
-from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import Column, Enum, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 from sqlalchemy.schema import Table
 
 ModelBase = declarative_base(name="ModelBase")
@@ -8,10 +8,10 @@ ModelBase = declarative_base(name="ModelBase")
 class Category(ModelBase):
     __tablename__ = "category"
 
-    name = Column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, primary_key=True)
 
-    tags = relationship("Tag", secondary="category_tags", back_populates="categories")
-    users = relationship("User", secondary="category_users")
+    tags: Mapped[list["Tag"]] = relationship(secondary="category_tags", back_populates="categories")
+    users: Mapped[list["User"]] = relationship(secondary="category_users")
 
 
 category_users = Table(
@@ -32,15 +32,15 @@ category_tags = Table(
 class Tag(ModelBase):
     __tablename__ = "tags"
 
-    name = Column(String, primary_key=True)
-    created_by_id = Column(Integer, ForeignKey("users.id"))
-    created_by = relationship("User", foreign_keys=[created_by_id])
+    name: Mapped[str] = mapped_column(primary_key=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped["User"] = relationship(foreign_keys=[created_by_id])
 
-    users = relationship("User", secondary="user_tags", back_populates="tags")
-    categories = relationship("Category", secondary="category_tags", back_populates="tags")
+    users: Mapped[list["User"]] = relationship(secondary="user_tags", back_populates="tags")
+    categories: Mapped[list["Category"]] = relationship(secondary="category_tags", back_populates="tags")
 
     # If provided, posts in this tag always have the public access level.
-    is_public = Column(Boolean, default=False, nullable=False)
+    is_public: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 
 post_tags = Table(
@@ -68,33 +68,33 @@ post_users = Table(
 class Post(ModelBase):
     __tablename__ = "posts"
 
-    id = Column(Integer, primary_key=True)
-    contents = Column(String)
-    title = Column(String)
-    access_level = Column(Enum("public", "private"), nullable=False, default="private")
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contents: Mapped[str]
+    title: Mapped[str] = mapped_column(nullable=True)
+    access_level = mapped_column(Enum("public", "private"), default="private")
 
-    created_by_id = Column(Integer, ForeignKey("users.id"))
-    created_by = relationship("User", backref="posts")
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped["User"] = relationship(backref="posts")
 
-    users = relationship("User", secondary=post_users)
+    users: Mapped[list["User"]] = relationship(secondary=post_users)
 
-    needs_moderation = Column(Boolean, nullable=False, default=False)
+    needs_moderation: Mapped[bool] = mapped_column(default=False)
 
-    tags = relationship("Tag", secondary=post_tags, backref="posts")
+    tags: Mapped[list["Tag"]] = relationship(secondary=post_tags, backref="posts")
 
 
 class User(ModelBase):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    username = Column(String, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(nullable=False)
 
-    is_moderator = Column(Boolean, nullable=False, default=False)
-    is_banned = Column(Boolean, nullable=False, default=False)
+    is_moderator: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_banned: Mapped[bool] = mapped_column(nullable=False, default=False)
 
     # Single tag
-    tag_name = Column(Integer, ForeignKey("tags.name"))
-    tag = relationship("Tag", foreign_keys=[tag_name])
+    tag_name: Mapped[int] = mapped_column(ForeignKey("tags.name"), nullable=True)
+    tag: Mapped["Tag"] = relationship(foreign_keys=[tag_name])
 
     # Many tags
-    tags = relationship("Tag", secondary=user_tags, back_populates="users")
+    tags: Mapped[list["Tag"]] = relationship(secondary=user_tags, back_populates="users")
