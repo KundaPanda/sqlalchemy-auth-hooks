@@ -53,6 +53,9 @@ jobs:
 
       - name: Run pyright
         uses: jakebailey/pyright-action@v1
+        with:
+          venv-path: .venv
+          lib: true
 
       - name: Run safety checks
         run: |
