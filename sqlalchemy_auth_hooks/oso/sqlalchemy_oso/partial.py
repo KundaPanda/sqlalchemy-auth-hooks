@@ -1,4 +1,14 @@
 """
+
+This file includes work covered by the following copyright and permission notices:
+
+ Copyright 2022 Oso Security, Inc.
+ Licensed under the Apache License, Version 2.0 (the "License");
+
+ The license file is attached in the root of the project as oso.LICENSE.
+
+---
+
 Translate Oso Expressions into SQLAlchemy Expressions.
 
 This module translates between Oso Expressions that are returned from queries
