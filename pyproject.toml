@@ -11,10 +11,9 @@ readme = "README.md"
 packages = [{ include = "sqlalchemy_auth_hooks" }]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 sqlalchemy = "^2.0"
 structlog = ">=20.0"
-asgiref = "^3.3.0"
 
 
 [tool.poetry.group.dev.dependencies]
