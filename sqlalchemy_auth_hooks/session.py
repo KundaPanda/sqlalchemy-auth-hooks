@@ -1,6 +1,6 @@
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 logger = structlog.get_logger()
 
@@ -34,6 +34,20 @@ class AuthorizedAsyncSession(CheckedAsyncSession):
 class UnauthorizedAsyncSession(CheckedAsyncSession):
     def __init__(self, *args, **kwargs):
         kwargs["sync_session_class"] = UnauthorizedSession
+        super().__init__(*args, **kwargs)
+
+
+class authorized_sessionmaker(sessionmaker):
+    def __init__(self, *args, user: object, **kwargs):
+        kwargs["class_"] = AuthorizedSession
+        kwargs["user"] = user
+        super().__init__(*args, **kwargs)
+
+
+class authorized_async_sessionmaker(async_sessionmaker):
+    def __init__(self, *args, user: object, **kwargs):
+        kwargs["class_"] = AuthorizedAsyncSession
+        kwargs["user"] = user
         super().__init__(*args, **kwargs)
 
 

@@ -1,4 +1,4 @@
-from tests.conftest import User
+from tests.core.conftest import User
 
 
 def test_update(engine, add_user, auth_handler, authorized_session):

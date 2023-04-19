@@ -6,7 +6,7 @@ from sqlalchemy_auth_hooks.references import (
     ReferenceConditions,
     ReferencedEntity,
 )
-from tests.conftest import User, UserGroup
+from tests.core.conftest import User, UserGroup
 
 
 def test_simple_get(engine, add_user, auth_handler, authorized_session):

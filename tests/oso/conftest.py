@@ -1,12 +1,10 @@
 from pathlib import Path
 
-import pytest
 from oso import Oso
 
-from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.oso.oso_handler import OsoHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import register_models
-from tests.conftest import Base, User
+from tests.core.conftest import *  # noqa: F401, F403
 
 
 @pytest.fixture(scope="session")

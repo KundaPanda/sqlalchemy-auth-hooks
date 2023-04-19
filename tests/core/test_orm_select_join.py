@@ -4,7 +4,7 @@ from sqlalchemy.sql.operators import eq, in_op
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from sqlalchemy_auth_hooks.references import ReferenceConditions
-from tests.conftest import Group, User, UserGroup
+from tests.core.conftest import Group, User, UserGroup
 
 
 def test_join(engine, add_user, user_group, auth_handler, authorized_session):

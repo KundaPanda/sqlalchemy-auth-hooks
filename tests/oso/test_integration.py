@@ -1,6 +1,6 @@
 from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.oso.oso_handler import OsoHandler
-from tests.conftest import User
+from tests.core.conftest import User
 
 
 def test_select(add_user, authorized_session, oso_handler):

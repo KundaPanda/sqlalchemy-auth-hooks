@@ -1,7 +1,4 @@
-from sqlalchemy.orm import Session
-
-from sqlalchemy_auth_hooks.session import AuthorizedSession
-from tests.conftest import User
+from tests.core.conftest import User
 
 
 def test_create_session(engine, auth_handler, authorized_session):

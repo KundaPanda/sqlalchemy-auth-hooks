@@ -3,7 +3,7 @@ from sqlalchemy.sql.operators import eq, startswith_op
 
 from sqlalchemy_auth_hooks.handler import ReferencedEntity
 from sqlalchemy_auth_hooks.references import ReferenceConditions
-from tests.conftest import User
+from tests.core.conftest import User
 
 
 def test_update(engine, auth_handler, add_user, authorized_session):
