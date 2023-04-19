@@ -1,11 +1,10 @@
 import asyncio
 from collections import defaultdict
-from typing import Any, Generator, cast
+from typing import Any, Generator, Mapping, Sequence, cast
 
+import structlog
 from sqlalchemy import (
-    BinaryExpression,
     BindParameter,
-    BooleanClauseList,
     ColumnClause,
     FromClause,
     Join,
@@ -13,9 +12,9 @@ from sqlalchemy import (
     Table,
 )
 from sqlalchemy.orm import Mapper, ORMExecuteState
-from sqlalchemy.sql.elements import ExpressionClauseList, UnaryExpression
+from sqlalchemy.sql.elements import ColumnElement, ExpressionClauseList, UnaryExpression
 from sqlalchemy.sql.operators import and_, eq, ne
-from sqlalchemy.sql.selectable import Alias
+from sqlalchemy.sql.selectable import Alias, ReturnsRows
 
 from sqlalchemy_auth_hooks.references import (
     CompositeConditions,
@@ -24,35 +23,56 @@ from sqlalchemy_auth_hooks.references import (
     ReferencedEntity,
 )
 
+logger = structlog.get_logger()
+
 
 def run_loop(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
 
+def get_parameter_value(
+    parameter: BindParameter[Any], parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None
+) -> Any | None:
+    effective_value = parameter.effective_value
+    if isinstance(parameters, dict):
+        return parameters.get(parameter.key, effective_value)
+    elif isinstance(parameters, list):
+        return next(
+            (param[parameter.key] for param in parameters if parameter.key in param),
+            effective_value,
+        )
+    else:
+        return effective_value
+
+
 def _process_condition(
-    condition: BinaryExpression | UnaryExpression,
-    parameters: dict[str, Any],
+    condition: ColumnElement[Any],
+    parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
 ) -> ReferenceConditions | None:
     if isinstance(condition, UnaryExpression):
         return
-    left = condition.left
-    right = condition.right
-    if not isinstance(left, ColumnClause):
-        if isinstance(right, ColumnClause) and condition.operator in (eq, ne):
-            left, right = right, left
-        else:
-            # We only care about conditions that involve columns
-            return None
+
+    if isinstance(condition.left, ColumnClause):
+        left: ColumnClause[Any] = condition.left
+        right = condition.right
+    elif isinstance(condition.right, ColumnClause) and condition.operator in (eq, ne):
+        left: ColumnClause[Any] = condition.right
+        right = condition.left
+    else:
+        # We only care about conditions that involve columns
+        return None
 
     selectable = left.table
-    if isinstance(selectable, Alias):
-        table = cast(Table, selectable.element)
-    else:
-        table = cast(Table, selectable)
+    if selectable is None:
+        return None
+
+    table = selectable.element if isinstance(selectable, Alias) else selectable
+
     if isinstance(table, Table):
         if isinstance(right, BindParameter):
-            key_value = right.effective_value or parameters.get(right.key)
+            parameter = cast(BindParameter[Any], right)
+            key_value = get_parameter_value(parameter, parameters)
             key_name = left.name
             return ReferenceConditions(
                 selectable=selectable,
@@ -63,9 +83,9 @@ def _process_condition(
             return
 
 
-def _traverse_conditions(
-    condition: BooleanClauseList | BinaryExpression | None,
-    parameters: dict[str, Any],
+def traverse_conditions(
+    condition: ColumnElement[Any] | None,
+    parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
 ) -> EntityConditions | None:
     if condition is None:
         return None
@@ -74,13 +94,14 @@ def _traverse_conditions(
         return _process_condition(condition, parameters)
     conditions = CompositeConditions(conditions=[], operator=condition.operator)
     for child in condition.clauses:
-        conditions.conditions.append(_traverse_conditions(child, parameters))
+        if child_condition := traverse_conditions(child, parameters):
+            conditions.conditions.append(child_condition)
     return conditions
 
 
 def _extract_mappers_from_clause(
-    clause: FromClause, table_mappers: dict[Table, Mapper]
-) -> Generator[tuple[Mapper, FromClause], None, None]:
+    clause: FromClause, table_mappers: dict[FromClause, Mapper[Any]]
+) -> Generator[tuple[Mapper[Any], ReturnsRows], None, None]:
     if isinstance(clause, Table):
         if mapper := table_mappers.get(clause):
             yield mapper, clause.selectable
@@ -91,23 +112,26 @@ def _extract_mappers_from_clause(
         yield next(_extract_mappers_from_clause(clause.element, table_mappers))[0], clause.selectable
 
 
-def _collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityConditions | None]:
-    intermediate_result: dict[Mapper, dict[FromClause, ReferencedEntity]] = defaultdict(dict)
+def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityConditions | None]:
+    intermediate_result: dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]] = defaultdict(dict)
 
     if not isinstance(state.statement, Select):
         return [], None
-    select_statement = state.statement
+    select_statement: Select[Any] = state.statement
 
     # Extract mappers from the FROM clause
+    if state.bind_mapper is None:
+        logger.warning("No bind mapper found for %s", state.statement)
+        return [], None
     registry = state.bind_mapper.registry
     froms = select_statement.get_final_froms()
     table_mappers = {mapper.local_table: mapper for mapper in registry.mappers}
 
-    all_conditions = []
+    all_conditions: list[EntityConditions] = []
     for from_clause in froms:
         if isinstance(from_clause, Join) and isinstance(from_clause.onclause, ExpressionClauseList):
             for clause in from_clause.onclause.clauses:
-                condition = _traverse_conditions(clause, state.parameters or {})
+                condition = traverse_conditions(clause, state.parameters or {})
                 if condition is not None:
                     all_conditions.append(condition)
 
@@ -116,7 +140,7 @@ def _collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], E
 
     # Extract primary key conditions from the WHERE clause, if any
     where_clause = select_statement.whereclause
-    where_conditions = _traverse_conditions(where_clause, state.parameters or {})
+    where_conditions = traverse_conditions(where_clause, state.parameters or {})
 
     if where_conditions is not None:
         all_conditions.append(where_conditions)

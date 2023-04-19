@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import FromClause
+from sqlalchemy import FromClause, ReturnsRows, Alias
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.operators import OperatorType
 
@@ -8,8 +8,8 @@ from sqlalchemy.sql.operators import OperatorType
 class ReferencedEntity:
     def __init__(
         self,
-        entity: Mapper,
-        selectable: FromClause,
+        entity: Mapper[Any],
+        selectable: ReturnsRows,
     ) -> None:
         self.entity = entity
         self.selectable = selectable
@@ -44,7 +44,7 @@ class CompositeConditions(EntityConditions):
 
 
 class ReferenceConditions(EntityConditions):
-    def __init__(self, selectable: FromClause, conditions: dict[str, Any]) -> None:
+    def __init__(self, selectable: Alias | FromClause, conditions: dict[str, Any]) -> None:
         self.selectable = selectable
         self.conditions = conditions
 

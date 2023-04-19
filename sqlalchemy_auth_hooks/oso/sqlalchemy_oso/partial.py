@@ -77,24 +77,24 @@ used.
 """
 
 import functools
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, cast
 
 from polar.exceptions import PolarRuntimeError, UnsupportedError
 from polar.expression import Expression
 from polar.partial import dot_path
 from polar.variable import Variable
 from sqlalchemy import inspect
-from sqlalchemy.orm import RelationshipProperty
+from sqlalchemy.orm import RelationshipProperty, InstrumentedAttribute, Mapper
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import expression as sql
-from sqlalchemy.sql.elements import True_
+from sqlalchemy.sql.elements import True_, ColumnElement, False_, BooleanClauseList, BinaryExpression
 
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.preprocess import preprocess
 
 # TODO (dhatch) Better types here, first any is model, second any is a sqlalchemy expr.
 EmitFunction = Callable[[Session, Any], Any]
 
-COMPARISONS = {
+COMPARISONS: dict[str, Callable[[Any, Any], Any]] = {
     "Unify": lambda p, v: p == v,
     "Eq": lambda p, v: p == v,
     "Neq": lambda p, v: p != v,
@@ -118,7 +118,7 @@ def flip_op(operator: str) -> str:
     return flips[operator]
 
 
-def and_filter(current, new):
+def and_filter(current: bool | ColumnElement[Any], new: ColumnElement[Any]) -> ColumnElement[Any]:
     if isinstance(current, bool):
         current = sql.true() if current else sql.false()
     if isinstance(current, True_):
@@ -127,13 +127,17 @@ def and_filter(current, new):
         return current & new
 
 
-def partial_to_filter(expression: Expression, session: Session, model, get_model):
+def partial_to_filter(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[str], type[Any]]
+) -> ColumnElement[Any]:
     """Convert constraints in ``partial`` to a filter over ``model`` that should be applied to query."""
     expression = preprocess(expression)
     return translate_expr(expression, session, model, get_model)
 
 
-def translate_expr(expression: Expression, session: Session, model, get_model):
+def translate_expr(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[Any], Any]
+) -> ColumnElement[Any] | False_ | True_ | BooleanClauseList:
     """Translate an expression into a SQLAlchemy expression.
 
     Accepts any type of expression. Entrypoint to the translation functions."""
@@ -150,7 +154,9 @@ def translate_expr(expression: Expression, session: Session, model, get_model):
         raise UnsupportedError(f"Unsupported {expression}")
 
 
-def translate_and(expression: Expression, session: Session, model, get_model):
+def translate_and(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[str], type[Any]]
+) -> ColumnElement[Any]:
     """Translate a Polar AND into a SQLAlchemy AND.
 
     Empty and is true: () => sql.true()
@@ -166,7 +172,9 @@ def translate_and(expression: Expression, session: Session, model, get_model):
     return expr
 
 
-def translate_isa(expression: Expression, session: Session, model, get_model):
+def translate_isa(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[str], type[Any]]
+) -> ColumnElement[Any]:
     """Translate an Isa operation. (``matches`` keyword)
 
     Check that the field on the left hand side matches the type on the right.
@@ -199,11 +207,13 @@ def translate_isa(expression: Expression, session: Session, model, get_model):
 
     assert not right.fields, "Unexpected fields in isa expression"
     constraint_type = get_model(right.tag)
-    model_type = inspect(model, raiseerr=True).class_
+    model_type = cast(Mapper[Any], inspect(model, raiseerr=True)).class_
     return sql.true() if issubclass(model_type, constraint_type) or isinstance(left, constraint_type) else sql.false()
 
 
-def translate_compare(expression: Expression, session: Session, model, get_model):
+def translate_compare(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[Any], type[Any]]
+) -> ColumnElement[Any]:
     """Translate a binary comparison operation.
 
     Operators are listed in ``COMPARISONS``.
@@ -260,14 +270,16 @@ def translate_compare(expression: Expression, session: Session, model, get_model
                 f"Unsupported comparison: {expression}. Models can only be compared" " with `=` or `==`"
             )
 
-        primary_keys = [pk.name for pk in inspect(model).primary_key]
+        primary_keys = [pk.name for pk in cast(Mapper[Any], inspect(model)).primary_key]
         pk_filter = sql.true()
         for key in primary_keys:
             pk_filter = and_filter(pk_filter, getattr(model, key) == getattr(right, key))
         return pk_filter
 
 
-def translate_in(expression: Expression, session: Session, model, get_model):
+def translate_in(
+    expression: Expression, session: Session, model: type[Any], get_model: Callable[[Any], Any]
+) -> ColumnElement[Any]:
     """Translate the in operator.
 
     Relationship contains at least one value that matches expr.
@@ -317,7 +329,7 @@ def translate_in(expression: Expression, session: Session, model, get_model):
         return translate_dot(path, session, model, functools.partial(emit_contains, field_name, left))
 
 
-def translate_dot(path: Tuple[str, ...], session: Session, model, func: EmitFunction):
+def translate_dot(path: Tuple[str, ...], session: Session, model: type[Any], func: EmitFunction) -> ColumnElement[Any]:
     """Translate an operation over a path.
 
     Used to translate comparison operations over paths, and in operations.
@@ -342,12 +354,12 @@ def translate_dot(path: Tuple[str, ...], session: Session, model, func: EmitFunc
             return property.any(translate_dot(path[1:], session, model, func))
 
 
-def get_relationship(model: type, field_name: str):
+def get_relationship(model: type[Any], field_name: str) -> tuple[InstrumentedAttribute[Any], type[Any], bool | None]:
     """Get the property object for field on model. field must be a relationship field.
 
     :returns: (property, model, is_multi_valued)
     """
-    property = getattr(model, field_name)
+    property: InstrumentedAttribute[Any] = getattr(model, field_name)
     assert isinstance(property.property, RelationshipProperty)
     relationship = property.property
     model = property.entity.class_
@@ -355,19 +367,23 @@ def get_relationship(model: type, field_name: str):
     return (property, model, relationship.uselist)
 
 
-def emit_compare(field_name: str, value, operator, session: Session, model):
+def emit_compare(
+    field_name: str, value: Any, operator: str, session: Session, model: type[Any]
+) -> BinaryExpression[Any]:
     """Emit a comparison operation comparing the value of ``field_name`` on ``model`` to ``value``."""
     assert not isinstance(value, Variable), "value is a variable"
     property = getattr(model, field_name)
     return COMPARISONS[operator](property, value)
 
 
-def emit_subexpression(sub_expression: Expression, get_model, session: Session, model):
+def emit_subexpression(
+    sub_expression: Expression, get_model: Callable[[Any], Any], session: Session, model: type[Any]
+) -> ColumnElement[Any] | False_ | True_ | BooleanClauseList:
     """Emit a sub-expression on ``model``."""
     return translate_expr(sub_expression, session, model, get_model)
 
 
-def emit_contains(field_name: str, value, session: Session, model):
+def emit_contains(field_name: str, value: Any, session: Session, model: type[Any]) -> ColumnElement[Any]:
     """Emit a contains operation, checking that multi-valued relationship field ``field_name`` contains ``value``."""
     # TODO (dhatch): Could this be valid for fields that are not relationship fields?
     property, model, is_multi_valued = get_relationship(model, field_name)

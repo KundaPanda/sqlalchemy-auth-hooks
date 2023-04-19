@@ -12,17 +12,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction, with_loader_criteria
 from structlog.stdlib import BoundLogger
 
-from sqlalchemy_auth_hooks.common_hooks import _Hook
+from sqlalchemy_auth_hooks.common_hooks import Hook
 from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
 from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
-from sqlalchemy_auth_hooks.utils import _collect_entities, run_loop
+from sqlalchemy_auth_hooks.utils import collect_entities, run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
 _O = TypeVar("_O")
 
 
-class _MutationHook(_Hook[_O], abc.ABC):
+class MutationHook(Hook[_O], abc.ABC):
     def __init__(self, state: InstanceState[_O]) -> None:
         self.state = state
 
@@ -30,19 +30,19 @@ class _MutationHook(_Hook[_O], abc.ABC):
         return hash(self.state)
 
 
-class _CreateHook(_MutationHook[_O]):
+class CreateHook(MutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Create hook called")
         await handler.after_single_create(session, self.state.object)
 
 
-class _DeleteHook(_MutationHook[_O]):
+class DeleteHook(MutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
         logger.debug("Delete hook called")
         await handler.after_single_delete(session, self.state.object)
 
 
-class _UpdateHook(_MutationHook[_O]):
+class _UpdateHook(MutationHook[_O]):
     def __init__(self, state: InstanceState[_O], changes: dict[str, Any]) -> None:
         super().__init__(state)
         self.changes = changes
@@ -58,8 +58,7 @@ T = TypeVar("T")
 class ORMHooks:
     def __init__(self, handler: SQLAlchemyAuthHandler) -> None:
         self.handler = handler
-        self._tasks: set[asyncio.Task] = set()
-        self._pending_hooks: dict[Session, dict[tuple[Any] | None, list[_Hook]]] = defaultdict(
+        self._pending_hooks: dict[Session, dict[tuple[Any, ...] | None, list[Hook[Any]]]] = defaultdict(
             lambda: defaultdict(list)
         )
         self._loop = asyncio.new_event_loop()
@@ -71,7 +70,7 @@ class ORMHooks:
         return future.result()
 
     @staticmethod
-    def _get_state_changes(state: InstanceState[_O]) -> dict[str, Any]:
+    def _get_state_changes(state: InstanceState[Any]) -> dict[str, Any]:
         return {attr.key: attr.history.added[-1] for attr in state.attrs if attr.history.has_changes()}  # type: ignore
 
     def after_flush(self, session: Session, flush_context: UOWTransaction) -> None:
@@ -93,10 +92,10 @@ class ORMHooks:
             for state in states:
                 if not state.deleted and not state.detached and state.has_identity and state.is_instance:
                     # Create
-                    self._pending_hooks[session][state.identity_key].append(_CreateHook(state))
+                    self._pending_hooks[session][state.identity_key].append(CreateHook(state))
                 elif state.deleted and state.has_identity and state.is_instance:
                     # Delete
-                    self._pending_hooks[session][state.identity_key].append(_DeleteHook(state))
+                    self._pending_hooks[session][state.identity_key].append(DeleteHook(state))
 
     def after_commit(self, session: Session) -> None:
         logger.debug("after_commit")
@@ -124,7 +123,7 @@ class ORMHooks:
         if check_skip(orm_execute_state.session):
             return
         if orm_execute_state.is_select:
-            entities, conditions = _collect_entities(orm_execute_state)
+            entities, conditions = collect_entities(orm_execute_state)
 
             async def prepare_filters() -> None:
                 async for selectable, filter_exp in self.handler.before_select(
@@ -137,7 +136,7 @@ class ORMHooks:
             return
 
 
-def _register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
+def register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
     """
     Register hooks for SQLAlchemy ORM events.
     """

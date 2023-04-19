@@ -1,3 +1,5 @@
+from typing import Any
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session, sessionmaker
@@ -10,7 +12,7 @@ class CheckedSession(Session):
 
 
 class AuthorizedSession(CheckedSession):
-    def __init__(self, *args, user: object, **kwargs):
+    def __init__(self, *args: Any, user: object, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.user = user
 
@@ -24,7 +26,7 @@ class CheckedAsyncSession(AsyncSession):
 
 
 class AuthorizedAsyncSession(CheckedAsyncSession):
-    def __init__(self, *args, user: object, **kwargs):
+    def __init__(self, *args: Any, user: object, **kwargs: Any) -> None:
         kwargs["sync_session_class"] = AuthorizedSession
         kwargs["user"] = user
         super().__init__(*args, **kwargs)
@@ -32,23 +34,23 @@ class AuthorizedAsyncSession(CheckedAsyncSession):
 
 
 class UnauthorizedAsyncSession(CheckedAsyncSession):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs["sync_session_class"] = UnauthorizedSession
         super().__init__(*args, **kwargs)
 
 
-class authorized_sessionmaker(sessionmaker):
-    def __init__(self, *args, user: object, **kwargs):
+class authorized_sessionmaker(sessionmaker[AuthorizedSession]):
+    def __init__(self, *args: Any, user: object, **kwargs: Any) -> None:
         kwargs["class_"] = AuthorizedSession
         kwargs["user"] = user
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)  # type: ignore
 
 
-class authorized_async_sessionmaker(async_sessionmaker):
-    def __init__(self, *args, user: object, **kwargs):
+class authorized_async_sessionmaker(async_sessionmaker[AuthorizedAsyncSession]):
+    def __init__(self, *args: Any, user: object, **kwargs: Any) -> None:
         kwargs["class_"] = AuthorizedAsyncSession
         kwargs["user"] = user
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)  # type: ignore
 
 
 def check_skip(session: Session) -> bool:

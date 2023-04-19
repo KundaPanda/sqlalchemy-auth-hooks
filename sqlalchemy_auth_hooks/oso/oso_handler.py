@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, cast
 
 import structlog
 from oso import Oso
@@ -19,8 +19,8 @@ class OsoHandler(SQLAlchemyAuthHandler):
         self, oso: Oso, checked_permissions: dict[type[Any], str], default_checked_permission: str | None = None
     ) -> None:
         self.oso = oso
-        self.checked_permissions: dict[Mapper, str] = {
-            inspect(entity).mapper: permission for entity, permission in checked_permissions.items()
+        self.checked_permissions: dict[Mapper[Any], str] = {
+            cast(Mapper[Any], inspect(entity)).mapper: permission for entity, permission in checked_permissions.items()
         }
         self.default_checked_permission = default_checked_permission
 
@@ -29,7 +29,7 @@ class OsoHandler(SQLAlchemyAuthHandler):
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
         conditions: EntityConditions | None,
-    ) -> AsyncIterator[tuple[Mapper, ExpressionElementRole[Any]]]:
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         for referenced_entity in referenced_entities:
             checked_permission = self.checked_permissions.get(referenced_entity.entity, self.default_checked_permission)
             if checked_permission is None:

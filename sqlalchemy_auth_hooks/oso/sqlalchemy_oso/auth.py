@@ -10,12 +10,14 @@ This file includes work covered by the following copyright and permission notice
 """
 
 from functools import reduce
+from typing import Any, TypeVar, cast
 
 from oso import Oso
-from polar import Variable
+from polar import Expression, Variable
 from polar.exceptions import DuplicateClassAliasError, OsoError, PolarRuntimeError
 from polar.partial import TypeConstraint
-from sqlalchemy import inspect
+from sqlalchemy import ColumnElement, inspect
+from sqlalchemy.orm import DeclarativeMeta, InstrumentedAttribute, Mapper, registry
 from sqlalchemy.orm.query import Query
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import expression as sql
@@ -23,19 +25,21 @@ from sqlalchemy.sql import expression as sql
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.compat import iterate_model_classes
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.partial import partial_to_filter
 
+_OT = TypeVar("_OT", bound=Any)
 
-def default_polar_model_name(model: type) -> str:
+
+def default_polar_model_name(model: type[Any]) -> str:
     """Return polar class name for SQLAlchemy model."""
     return model.__name__
 
 
-def null_query(session: Session, model: type) -> Query:
+def null_query(session: Session, model: type[_OT]) -> Query[_OT]:
     """Return an intentionally empty query."""
     # TODO (dhatch): Make this not hit the database.
     return session.query(model).filter(sql.false())
 
 
-def register_models(oso: Oso, base_or_registry):
+def register_models(oso: Oso, base_or_registry: registry | DeclarativeMeta) -> None:
     """Register all models in registry (SQLAlchemy 1.4) or declarative base
     class (1.3 and 1.4) ``base_or_registry`` with Oso as classes."""
     for model in iterate_model_classes(base_or_registry):
@@ -53,7 +57,9 @@ def register_models(oso: Oso, base_or_registry):
             ) from e
 
 
-def authorize_model(oso: Oso, actor: object, action: str, session: Session, model: type):
+def authorize_model(
+    oso: Oso, actor: object, action: str, session: Session, model: type[Any]
+) -> ColumnElement[Any] | None:
     """Return SQLAlchemy expression that applies the policy to ``model``.
 
     Executing this query will return only authorized objects. If the request is
@@ -67,14 +73,14 @@ def authorize_model(oso: Oso, actor: object, action: str, session: Session, mode
     :param model: The model to authorize, must be a SQLAlchemy model or alias.
     """
 
-    def get_field_type(model, field):
+    def get_field_type(model: type[Any], field: str) -> type[Any]:
         try:
-            field = getattr(model, field)
+            model_field = cast(InstrumentedAttribute[Any], getattr(model, field))
         except AttributeError as e:
             raise PolarRuntimeError(f"Cannot get property {field} on {model}.") from e
 
         try:
-            return field.entity.class_
+            return model_field.entity.class_
         except AttributeError as e:
             raise PolarRuntimeError(f"Cannot determine type of {field} on {model}.") from e
 
@@ -106,14 +112,13 @@ def authorize_model(oso: Oso, actor: object, action: str, session: Session, mode
     has_result = False
     for result in results:
         has_result = True
-
-        resource_partial = result["bindings"]["resource"]
+        resource_partial = cast(Expression, result["bindings"]["resource"])
         if isinstance(resource_partial, model):
 
-            def f(pk):
+            def f(pk: str) -> Any:
                 return getattr(model, pk) == getattr(resource_partial, pk)  # noqa: B023
 
-            filters = [f(pk.name) for pk in inspect(model).primary_key]
+            filters = [f(pk.name) for pk in cast(Mapper[Any], inspect(model)).primary_key]
             filter = reduce(lambda a, b: a & b, filters)
 
         else:

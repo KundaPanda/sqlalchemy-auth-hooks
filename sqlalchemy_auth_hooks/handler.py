@@ -1,7 +1,7 @@
 import abc
 from typing import Any, AsyncIterator
 
-from sqlalchemy import FromClause
+from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
 
 from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
@@ -69,7 +69,7 @@ class SQLAlchemyAuthHandler(
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
         conditions: EntityConditions | None,
-    ) -> AsyncIterator[tuple[FromClause, ExpressionElementRole[Any]]]:
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.
         """

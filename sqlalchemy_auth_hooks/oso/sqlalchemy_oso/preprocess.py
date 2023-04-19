@@ -62,7 +62,7 @@ def preprocess_expression(expression: Expression, variables: TGroupedExpressions
 
 
 def preprocess_and(expression: Expression, variables: TGroupedExpressions) -> Expression:
-    new_expression = []
+    new_expression: list[Expression | None] = []
 
     for expression_arg in expression.args:
         if maybe_expr := preprocess_expression(expression_arg, variables):
@@ -92,7 +92,7 @@ def sub_this(variable: Variable, expression: Expression) -> Expression:
     return sub_var(variable, Variable("_this"), expression)
 
 
-def sub_var(variable: Variable, value, expression: Expression) -> Expression:
+def sub_var(variable: Variable, value: Expression | Variable, expression: Expression) -> Expression:
     """Substitute ``value`` for ``variable`` in ``expression``."""
     new_expr = []
     for arg in expression.args:
@@ -101,7 +101,7 @@ def sub_var(variable: Variable, value, expression: Expression) -> Expression:
         elif arg == variable:
             arg = value
 
-        new_expr.append(arg)
+        new_expr.append(arg)  # type: ignore
 
     return Expression(expression.operator, new_expr)
 

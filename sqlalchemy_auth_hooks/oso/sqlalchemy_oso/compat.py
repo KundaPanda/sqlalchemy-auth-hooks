@@ -25,6 +25,4 @@ def iterate_model_classes(base_or_registry: registry | DeclarativeMeta) -> Gener
     """
     if isinstance(base_or_registry, DeclarativeMeta):
         base_or_registry = base_or_registry.registry
-    if not isinstance(base_or_registry, registry):
-        raise TypeError("base_or_registry must be a DeclarativeMeta or registry")
     yield from (mapper.class_ for mapper in base_or_registry.mappers)
