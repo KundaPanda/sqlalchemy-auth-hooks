@@ -43,7 +43,7 @@ jobs:
         run: |
           BUILD_VER="$(ls dist/sqlalchemy_auth_hooks-*.tar.gz)"
           echo "Path: $BUILD_VER"
-          if [[ $BUILD_VER =~ (sqlalchemy_auth_hooks-)(.*) ]]; then
+          if [[ $BUILD_VER =~ (sqlalchemy_auth_hooks-)(.*).tar.gz ]]; then
               echo "version=${BASH_REMATCH[2]}" >> $GITHUB_OUTPUT
               echo "Version of build: ${BASH_REMATCH[2]}"
           else
