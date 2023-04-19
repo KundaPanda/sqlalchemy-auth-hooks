@@ -1,58 +1,81 @@
 name: Release
 
-on:
-  push:
-    tags:
-      - '*.*.*'
+on: push
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
     steps:
-      #----------------------------------------------
-      #       check-out repo and set-up python
-      #----------------------------------------------
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-      #----------------------------------------------
-      #        load pip cache if cache exists
-      #----------------------------------------------
-      - uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-          restore-keys: ${{ runner.os }}-pip
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-      #----------------------------------------------
-      #  -----  install & configure poetry  -----
-      #----------------------------------------------
+      - name: Install python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Update PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Build project for distribution
+      - name: Build package
         run: poetry build
 
-      - name: Check Version
-        id: check-version
+      - name: Install coveo-pypi-cli
+        run: pip install coveo-pypi-cli
+
+      - name: Determine the version for this release from the build
+        id: current
         run: |
-          [[ "$(poetry version --short)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || echo prerelease=true >> $GITHUB_OUTPUT
+          BUILD_VER="$(ls dist/sqlalchemy-auth-hooks-*.tar.gz)"
+          echo "Path: $BUILD_VER"
+          if [[ $BUILD_VER =~ (pura-)([^,][0-9.]{4}) ]]; then
+              echo "::set-output name=version::${BASH_REMATCH[2]}"
+              echo "Version of build: ${BASH_REMATCH[2]}"
+          else
+              echo "No version found found"
+          fi
 
-      - name: Create Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "dist/*"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false
-          prerelease: steps.check-version.outputs.prerelease == 'true'
+      - name: Get latest published version
+        id: published
+        run: |
+          PUB_VER="$(pypi current-version sqlalchemy-auth-hooks)"
+          echo "::set-output name=version::$PUB_VER"
+          echo "Latest published version: $PUB_VER"
+  
 
-      - name: Publish to PyPI
+      - name: Publish to pypi if new version
+        if: (steps.current.outputs.version != steps.published.outputs.version)
+        shell: bash
+        run: |
+          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
+          if [[ '${{ github.ref_name }}' == 'main' ]]; then
+            poetry publish 
+          else
+            echo "Dry run of publishing the package"
+            poetry publish --dry-run
+          fi
+      - name: Tag repository
+        shell: bash
+        id: get-next-tag
+        if: (steps.current.outputs.version != steps.published.outputs.version)
+        run: |
+          TAG_NAME=${{ steps.current.outputs.version }}
+          echo "::set-output name=tag-name::$TAG_NAME"
+          echo "This release will be tagged as $TAG_NAME"
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git tag --annotate --message="Automated tagging system" $TAG_NAME ${{ github.sha }}
+      - name: Push the tag
+        if: (steps.current.outputs.version != steps.published.outputs.version)
         env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish
+          TAG_NAME: ${{ steps.current.outputs.version }}
+        run: |
+          if [[ ${{ github.ref_name }} == 'main' ]]; then
+            git push origin $TAG_NAME
+          else
+            echo "If this was the main branch, I would push a new tag named $TAG_NAME"
+          fi
