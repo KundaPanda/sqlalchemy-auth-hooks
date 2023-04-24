@@ -17,7 +17,7 @@ from polar import Expression, Variable
 from polar.exceptions import DuplicateClassAliasError, OsoError, PolarRuntimeError
 from polar.partial import TypeConstraint
 from sqlalchemy import ColumnElement, inspect
-from sqlalchemy.orm import DeclarativeMeta, InstrumentedAttribute, Mapper, registry
+from sqlalchemy.orm import InstrumentedAttribute, Mapper, registry
 from sqlalchemy.orm.query import Query
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import expression as sql
@@ -39,7 +39,7 @@ def null_query(session: Session, model: type[_OT]) -> Query[_OT]:
     return session.query(model).filter(sql.false())
 
 
-def register_models(oso: Oso, base_or_registry: registry | DeclarativeMeta) -> None:
+def register_models(oso: Oso, base_or_registry: registry | type[Any]) -> None:
     """Register all models in registry (SQLAlchemy 1.4) or declarative base
     class (1.3 and 1.4) ``base_or_registry`` with Oso as classes."""
     for model in iterate_model_classes(base_or_registry):
