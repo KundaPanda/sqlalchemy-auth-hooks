@@ -27,4 +27,5 @@ def iterate_model_classes(base_or_registry: registry | type[Any]) -> Generator[t
         base_or_registry = base_or_registry.registry
     if isinstance(base_or_registry, registry):
         yield from (mapper.class_ for mapper in base_or_registry.mappers)
-    raise TypeError("base_or_registry must be a registry or declarative base")
+    else:
+        raise TypeError("base_or_registry must be a registry or declarative base")
