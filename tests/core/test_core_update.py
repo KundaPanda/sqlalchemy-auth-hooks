@@ -6,12 +6,12 @@ from sqlalchemy_auth_hooks.references import ReferenceConditions
 from tests.core.conftest import User
 
 
-def test_update(engine, auth_handler, add_user, authorized_session):
+def test_update(engine, post_auth_handler, add_user, authorized_session):
     with authorized_session as session:
         session.execute(update(User).where(User.id == add_user.id).values(name="John"))
         session.commit()
     selectable = User.__table__
-    auth_handler.after_core_update.assert_called_once_with(
+    post_auth_handler.after_core_update.assert_called_once_with(
         ReferencedEntity(
             entity=inspect(User),
             selectable=selectable,
@@ -21,23 +21,23 @@ def test_update(engine, auth_handler, add_user, authorized_session):
     )
 
 
-def test_update_all(engine, auth_handler, add_user, authorized_session):
+def test_update_all(engine, post_auth_handler, add_user, authorized_session):
     with authorized_session as session:
         session.execute(update(User).values(name="John", age=10))
         session.commit()
-    auth_handler.after_core_update.assert_called_once_with(
+    post_auth_handler.after_core_update.assert_called_once_with(
         ReferencedEntity(entity=inspect(User), selectable=User.__table__),
         None,
         {"name": "John", "age": 10},
     )
 
 
-def test_update_condition(engine, auth_handler, add_user, authorized_session):
+def test_update_condition(engine, post_auth_handler, add_user, authorized_session):
     with authorized_session as session:
         session.execute(update(User).where(User.name.startswith("J")).values(name="John", age=10))
         session.commit()
     selectable = User.__table__
-    auth_handler.after_core_update.assert_called_once_with(
+    post_auth_handler.after_core_update.assert_called_once_with(
         ReferencedEntity(
             entity=inspect(User),
             selectable=selectable,

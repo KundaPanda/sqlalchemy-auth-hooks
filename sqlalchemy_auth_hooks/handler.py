@@ -8,9 +8,9 @@ from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
-class SQLAlchemyORMHandler(abc.ABC):
+class ORMPostAuthHandler(abc.ABC):
     """
-    Abstract class for handling SQLAlchemy ORM hook callbacks.
+    Abstract class with post authorization hooks (i.e. for update propagation)
     """
 
     @abc.abstractmethod
@@ -35,7 +35,13 @@ class SQLAlchemyORMHandler(abc.ABC):
         raise NotImplementedError
 
 
-class SQLAlchemyCoreHandler(abc.ABC):
+class ORMAuthHandler(abc.ABC):
+    """
+    Abstract class for ORM authorization checks
+    """
+
+
+class CorePostAuthHandler(abc.ABC):
     """
     Abstract class for handling SQLAlchemy Core hook callbacks.
     """
@@ -54,13 +60,9 @@ class SQLAlchemyCoreHandler(abc.ABC):
         raise NotImplementedError
 
 
-class SQLAlchemyAuthHandler(
-    SQLAlchemyORMHandler,
-    SQLAlchemyCoreHandler,
-    abc.ABC,
-):
+class CoreAuthHandler(abc.ABC):
     """
-    Abstract class for handling SQLAlchemy auth hook callbacks.
+    Abstract class for handling authorization of core database calls.
     """
 
     @abc.abstractmethod
@@ -74,3 +76,23 @@ class SQLAlchemyAuthHandler(
         Handle any select operations.
         """
         raise NotImplementedError
+
+
+class PostAuthHandler(
+    ORMPostAuthHandler,
+    CorePostAuthHandler,
+    abc.ABC,
+):
+    """
+    Abstract class for handling events after their processing (i.e. for state update propagation).
+    """
+
+
+class AuthHandler(
+    ORMAuthHandler,
+    CoreAuthHandler,
+    abc.ABC,
+):
+    """
+    Abstract class for authorizing database calls.
+    """

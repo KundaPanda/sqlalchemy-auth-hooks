@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, delete, true
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Session
 
-from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import (
@@ -55,7 +55,7 @@ def authorized_async_session(async_engine, auth_user):
 
 
 @pytest.fixture
-def auth_handler(engine, mocker: MockerFixture):
+def handlers(mocker: MockerFixture):
     class AsyncIterator:
         def __init__(
             self, session: Session, references: list[ReferencedEntity], conditions: ReferenceConditions | None
@@ -75,10 +75,21 @@ def auth_handler(engine, mocker: MockerFixture):
             self.pos += 1
             return val.entity, true()
 
-    test_handler = mocker.Mock(spec=SQLAlchemyAuthHandler)
-    test_handler.before_select.side_effect = AsyncIterator
-    register_hooks(test_handler)
-    yield test_handler
+    post_auth_handler = mocker.Mock(spec=PostAuthHandler)
+    auth_handler = mocker.Mock(spec=AuthHandler)
+    auth_handler.before_select.side_effect = AsyncIterator
+    register_hooks(auth_handler, post_auth_handler)
+    return auth_handler, post_auth_handler
+
+
+@pytest.fixture
+def post_auth_handler(engine, handlers):
+    return handlers[1]
+
+
+@pytest.fixture
+def auth_handler(engine, handlers):
+    return handlers[0]
 
 
 @pytest.fixture
@@ -156,5 +167,5 @@ async def cleanup_async(anyio_backend, async_engine):
 
 
 @pytest.fixture(autouse=True)
-def reset_handler(auth_handler):
-    auth_handler.reset_mock()
+def reset_handler(post_auth_handler):
+    post_auth_handler.reset_mock()

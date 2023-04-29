@@ -13,7 +13,7 @@ from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransacti
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.common_hooks import Hook
-from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler
 from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
 from sqlalchemy_auth_hooks.utils import collect_entities, run_loop
 
@@ -31,13 +31,13 @@ class MutationHook(Hook[_O], abc.ABC):
 
 
 class CreateHook(MutationHook[_O]):
-    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Create hook called")
         await handler.after_single_create(session, self.state.object)
 
 
 class DeleteHook(MutationHook[_O]):
-    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Delete hook called")
         await handler.after_single_delete(session, self.state.object)
 
@@ -47,7 +47,7 @@ class _UpdateHook(MutationHook[_O]):
         super().__init__(state)
         self.changes = changes
 
-    async def run(self, session: AuthorizedSession, handler: SQLAlchemyAuthHandler) -> None:
+    async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Update hook called")
         await handler.after_single_update(session, self.state.object, self.changes)
 
@@ -56,8 +56,9 @@ T = TypeVar("T")
 
 
 class ORMHooks:
-    def __init__(self, handler: SQLAlchemyAuthHandler) -> None:
-        self.handler = handler
+    def __init__(self, auth_handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
+        self.auth_handler = auth_handler
+        self.post_auth_handler = post_auth_handler
         self._pending_hooks: dict[Session, dict[tuple[Any, ...] | None, list[Hook[Any]]]] = defaultdict(
             lambda: defaultdict(list)
         )
@@ -106,7 +107,7 @@ class ORMHooks:
             return
         for pending_instance_key in self._pending_hooks[session]:
             for hook in self._pending_hooks[session][pending_instance_key]:
-                self.call_async(hook.run, session, self.handler)
+                self.call_async(hook.run, session, self.post_auth_handler)
         del self._pending_hooks[session]
 
     def after_rollback(self, session: Session) -> None:
@@ -126,7 +127,7 @@ class ORMHooks:
             entities, conditions = collect_entities(orm_execute_state)
 
             async def prepare_filters() -> None:
-                async for selectable, filter_exp in self.handler.before_select(
+                async for selectable, filter_exp in self.auth_handler.before_select(
                     cast(AuthorizedSession, orm_execute_state.session), entities, conditions
                 ):
                     where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
@@ -136,12 +137,12 @@ class ORMHooks:
             return
 
 
-def register_orm_hooks(handler: SQLAlchemyAuthHandler) -> None:
+def register_orm_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
     """
     Register hooks for SQLAlchemy ORM events.
     """
 
-    hooks = ORMHooks(handler)
+    hooks = ORMHooks(handler, post_auth_handler)
     event.listen(Session, "after_flush", hooks.after_flush)
     event.listen(Session, "after_flush_postexec", hooks.after_flush_postexec)
     event.listen(Session, "after_commit", hooks.after_commit)

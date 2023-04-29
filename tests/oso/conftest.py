@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from sqlalchemy_auth_hooks.hooks import register_hooks
-from sqlalchemy_auth_hooks.oso.oso_handler import OsoHandler
+from sqlalchemy_auth_hooks.oso.oso_handler import OsoAuthHandler, OsoPostAuthHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import register_models
 from sqlalchemy_auth_hooks.session import (
     AuthorizedAsyncSession,
@@ -141,6 +141,7 @@ def oso(auth_user):
 
 @pytest.fixture
 def oso_handler(oso):
-    handler = OsoHandler(oso=oso, checked_permissions={User: "query"})
-    register_hooks(handler)
+    handler = OsoAuthHandler(oso=oso, checked_permissions={User: "query"})
+    post_auth_handler = OsoPostAuthHandler()
+    register_hooks(handler, post_auth_handler)
     return handler

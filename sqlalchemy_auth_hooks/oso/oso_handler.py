@@ -6,7 +6,7 @@ from sqlalchemy import false, inspect
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
 
-from sqlalchemy_auth_hooks.handler import SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import authorize_model
 from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
@@ -14,7 +14,7 @@ from sqlalchemy_auth_hooks.session import AuthorizedSession
 logger = structlog.get_logger()
 
 
-class OsoHandler(SQLAlchemyAuthHandler):
+class OsoAuthHandler(AuthHandler):
     def __init__(
         self, oso: Oso, checked_permissions: dict[type[Any], str], default_checked_permission: str | None = None
     ) -> None:
@@ -45,6 +45,8 @@ class OsoHandler(SQLAlchemyAuthHandler):
             else:
                 logger.warning("No filter for %s", referenced_entity.entity)
 
+
+class OsoPostAuthHandler(PostAuthHandler):
     async def after_single_create(self, session: AuthorizedSession, instance: Any) -> None:
         # Not relevant for Oso
         pass

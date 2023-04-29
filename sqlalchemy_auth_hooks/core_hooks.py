@@ -17,15 +17,16 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeMeta, Mapper
 
-from sqlalchemy_auth_hooks.handler import ReferencedEntity, SQLAlchemyAuthHandler
+from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler, ReferencedEntity
 from sqlalchemy_auth_hooks.utils import run_loop, traverse_conditions
 
 T = TypeVar("T")
 
 
 class CoreHooks:
-    def __init__(self, handler: SQLAlchemyAuthHandler) -> None:
-        self.handler = handler
+    def __init__(self, auth_handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
+        self.auth_handler = auth_handler
+        self.post_auth_handler = post_auth_handler
         self._loop = asyncio.new_event_loop()
         self._executor_thread = Thread(target=partial(run_loop, self._loop), daemon=True)
         self._executor_thread.start()
@@ -82,14 +83,14 @@ class CoreHooks:
         updated_data: dict[str, Any] = {col.name: parameter.value for col, parameter in parameters.items()}
         for mapped_dict in references.values():
             for referenced_entity in mapped_dict.values():
-                self.call_async(self.handler.after_core_update, referenced_entity, conditions, updated_data)
+                self.call_async(self.post_auth_handler.after_core_update, referenced_entity, conditions, updated_data)
 
 
-def register_core_hooks(handler: SQLAlchemyAuthHandler) -> None:
+def register_core_hooks(auth_handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
     """
     Register hooks for SQLAlchemy Core events.
     """
 
-    hooks = CoreHooks(handler)
+    hooks = CoreHooks(auth_handler, post_auth_handler)
     event.listen(Engine, "before_execute", hooks.before_execute)
     event.listen(Engine, "after_execute", hooks.after_execute)
