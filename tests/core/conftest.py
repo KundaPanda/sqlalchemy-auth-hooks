@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Session
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
-from sqlalchemy_auth_hooks.orm_hooks import register_hooks
+from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import (
