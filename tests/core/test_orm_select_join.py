@@ -2,8 +2,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import aliased, joinedload, selectinload
 from sqlalchemy.sql.operators import eq, in_op
 
-from sqlalchemy_auth_hooks.handler import ReferencedEntity
-from sqlalchemy_auth_hooks.references import ReferenceConditions
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from tests.core.conftest import Group, User, UserGroup
 
 

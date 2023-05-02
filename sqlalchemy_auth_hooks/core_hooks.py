@@ -17,7 +17,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeMeta, Mapper
 
-from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler, ReferencedEntity
+from sqlalchemy_auth_hooks.auth_handler import AuthHandler
+from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
+from sqlalchemy_auth_hooks.references import ReferencedEntity
 from sqlalchemy_auth_hooks.utils import run_loop, traverse_conditions
 
 T = TypeVar("T")

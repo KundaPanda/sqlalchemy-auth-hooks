@@ -1,8 +1,7 @@
 from sqlalchemy import inspect, update
 from sqlalchemy.sql.operators import eq, startswith_op
 
-from sqlalchemy_auth_hooks.handler import ReferencedEntity
-from sqlalchemy_auth_hooks.references import ReferenceConditions
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from tests.core.conftest import User
 
 

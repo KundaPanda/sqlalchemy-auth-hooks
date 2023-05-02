@@ -6,8 +6,9 @@ from sqlalchemy import false, inspect
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
 
-from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler
+from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import authorize_model
+from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 

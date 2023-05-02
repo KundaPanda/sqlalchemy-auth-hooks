@@ -1,7 +1,7 @@
 import abc
 from typing import Generic, TypeVar
 
-from sqlalchemy_auth_hooks.handler import PostAuthHandler
+from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 _O = TypeVar("_O")

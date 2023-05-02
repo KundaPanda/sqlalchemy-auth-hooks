@@ -12,8 +12,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction, with_loader_criteria
 from structlog.stdlib import BoundLogger
 
+from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.common_hooks import Hook
-from sqlalchemy_auth_hooks.handler import AuthHandler, PostAuthHandler
+from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
 from sqlalchemy_auth_hooks.utils import collect_entities, run_loop
 
