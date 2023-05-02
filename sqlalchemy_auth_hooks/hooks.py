@@ -25,7 +25,7 @@ from sqlalchemy.orm import (
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
-from sqlalchemy_auth_hooks.events import Event, UpdateSingleEvent, CreateSingleEvent, DeleteSingleEvent, UpdateManyEvent
+from sqlalchemy_auth_hooks.events import CreateSingleEvent, DeleteSingleEvent, Event, UpdateManyEvent, UpdateSingleEvent
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
@@ -100,47 +100,54 @@ class SQLAlchemyAuthHooks:
             return
         del self._pending_events[session]
 
-    def handle_update(self, session: AuthorizedSession, clause_element: Update) -> None:
-        if "entity" not in clause_element.entity_description:
+    def handle_update(self, orm_execute_state: ORMExecuteState) -> None:
+        statement = cast(Update, orm_execute_state.statement)
+        if "entity" not in statement.entity_description:
             # ORM update
             return
-        entity_cls: DeclarativeMeta = clause_element.entity_description["entity"]
+        entity_cls: DeclarativeMeta = statement.entity_description["entity"]
         registry = entity_cls.registry
         table_mappers: dict[FromClause, Mapper[Any]] = {mapper.local_table: mapper for mapper in registry.mappers}
-        mapper = table_mappers[clause_element.entity_description["table"]]
+        mapper = table_mappers[statement.entity_description["table"]]
 
         references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
             mapper: {
-                clause_element.entity_description["table"]: ReferencedEntity(
+                statement.entity_description["table"]: ReferencedEntity(
                     entity=mapper,
-                    selectable=clause_element.entity_description["table"],
+                    selectable=statement.entity_description["table"],
                 )
             }
         }
-        conditions = traverse_conditions(clause_element.whereclause, {})
+        conditions = traverse_conditions(statement.whereclause, {})
 
-        parameters = cast(dict[Column[Any], BindParameter[Any]], clause_element._values)  # type: ignore
+        parameters = cast(dict[Column[Any], BindParameter[Any]], statement._values)  # type: ignore
         updated_data: dict[str, Any] = {col.name: parameter.value for col, parameter in parameters.items()}
         for mapped_dict in references.values():
             for referenced_entity in mapped_dict.values():
-                self._pending_events[session][None].append(UpdateManyEvent(referenced_entity, conditions, updated_data))
+                self._pending_events[orm_execute_state.session][None].append(
+                    UpdateManyEvent(referenced_entity, conditions, updated_data)
+                )
+
+    def handle_select(self, orm_execute_state: ORMExecuteState) -> None:
+        entities, conditions = collect_entities(orm_execute_state)
+
+        async def prepare_filters() -> None:
+            async for selectable, filter_exp in self.auth_handler.before_select(
+                cast(AuthorizedSession, orm_execute_state.session), entities, conditions
+            ):
+                where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
+                orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
+
+        self.call_async(prepare_filters)
 
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if check_skip(orm_execute_state.session):
             return
-        session = cast(AuthorizedSession, orm_execute_state.session)
         if orm_execute_state.is_select:
-            entities, conditions = collect_entities(orm_execute_state)
-
-            async def prepare_filters() -> None:
-                async for selectable, filter_exp in self.auth_handler.before_select(session, entities, conditions):
-                    where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
-                    orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
-
-            self.call_async(prepare_filters)
+            self.handle_select(orm_execute_state)
         elif orm_execute_state.is_update:
-            self.handle_update(session, cast(Update, orm_execute_state.statement))
+            self.handle_update(orm_execute_state)
 
 
 def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
