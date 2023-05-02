@@ -1,20 +1,17 @@
-from typing import Iterable, cast, Any
+from typing import Any, Iterable, cast
 
 from sqlalchemy import (
-    Update,
-    select,
-    true,
-    Column,
     BindParameter,
+    Column,
+    Update,
+    true,
 )
 from sqlalchemy.orm import (
     InstanceState,
+    Mapper,
     ORMExecuteState,
     with_loader_criteria,
-    Session,
-    Mapper,
 )
-from sqlalchemy.sql.functions import count
 from sqlalchemy.sql.operators import eq
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
@@ -43,7 +40,7 @@ class StatementAuthorizer:
                 orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
 
     async def authorize_object_update(
-        self, session: AuthorizedSession, states: Iterable[tuple[InstanceState, dict[str, Any]]]
+        self, session: AuthorizedSession, states: Iterable[tuple[InstanceState[Any], dict[str, Any]]]
     ) -> None:
         for state, changes in states:
             mapper: Mapper[Any] = state.mapper  # type: ignore

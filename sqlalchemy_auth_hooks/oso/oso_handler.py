@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Iterable, TypedDict, cast
+from typing import Any, AsyncIterator, TypedDict, cast
 
 import structlog
 from oso import Oso
@@ -56,7 +56,7 @@ class OsoAuthHandler(AuthHandler):
     async def before_update(
         self,
         session: AuthorizedSession,
-        referenced_entities: Iterable[ReferencedEntity],
+        referenced_entities: list[ReferencedEntity],
         conditions: EntityConditions | None,
         changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
@@ -91,7 +91,7 @@ class OsoPostAuthHandler(PostAuthHandler):
     async def after_many_update(
         self,
         session: AuthorizedSession,
-        referenced_entity: ReferencedEntity,
+        entity: ReferencedEntity,
         conditions: EntityConditions | None,
         changes: dict[str, Any],
     ) -> None:

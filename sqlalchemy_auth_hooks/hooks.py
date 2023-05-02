@@ -64,12 +64,12 @@ class SQLAlchemyAuthHooks:
                     self._pending_events[session][state.identity_key].append(UpdateSingleEvent(state, changes))
 
     def before_flush(
-        self, session: Session, flush_context: UOWTransaction, instances: list[InstanceState[Any]] | None
+        self, session: Session, _flush_context: UOWTransaction, _instances: list[InstanceState[Any]] | None
     ) -> None:
         logger.debug("before_flush")
         if check_skip(session):
             return
-        pending_updates = []
+        pending_updates: list[tuple[InstanceState[Any], dict[str, Any]]] = []
         for instance in session.dirty:
             state = inspect(instance)
             if state.modified and state.has_identity and state.is_instance:

@@ -1,5 +1,5 @@
 import abc
-from typing import Any, AsyncIterator, Iterable
+from typing import Any, AsyncIterator
 
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
@@ -17,7 +17,7 @@ class AuthHandler(abc.ABC):
     def before_select(
         self,
         session: AuthorizedSession,
-        referenced_entities: Iterable[ReferencedEntity],
+        referenced_entities: list[ReferencedEntity],
         conditions: EntityConditions | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
@@ -29,7 +29,7 @@ class AuthHandler(abc.ABC):
     def before_update(
         self,
         session: AuthorizedSession,
-        referenced_entities: Iterable[ReferencedEntity],
+        referenced_entities: list[ReferencedEntity],
         conditions: EntityConditions | None,
         changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:

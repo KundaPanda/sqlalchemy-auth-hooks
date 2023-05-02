@@ -1,7 +1,7 @@
 import abc
 from typing import Any
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
@@ -36,7 +36,7 @@ class PostAuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         entity: ReferencedEntity,
-        conditions: ReferenceConditions | None,
+        conditions: EntityConditions | None,
         changes: dict[str, Any],
     ) -> None:
         """
