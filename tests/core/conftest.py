@@ -58,7 +58,7 @@ def authorized_async_session(async_engine, auth_user):
 
 @pytest.fixture
 def handlers(mocker: MockerFixture):
-    class AsyncIterator:
+    class AllowAll:
         def __init__(self, _session: AuthorizedSession, references: Iterable[ReferencedEntity], *_: Any, **__: Any):
             self.references = iter(references)
 
@@ -72,10 +72,25 @@ def handlers(mocker: MockerFixture):
                 raise StopAsyncIteration from e
             return val.entity, true()
 
+    class AllowAllInsert:
+        def __init__(self, _session: AuthorizedSession, reference: ReferencedEntity, *_: Any, **__: Any):
+            self.reference = reference
+            self.returned = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self.returned:
+                raise StopAsyncIteration
+            self.returned = True
+            return self.reference.entity, true()
+
     post_auth_handler = mocker.Mock(spec=PostAuthHandler)
     auth_handler = mocker.Mock(spec=AuthHandler)
-    auth_handler.before_select.side_effect = AsyncIterator
-    auth_handler.before_update.side_effect = AsyncIterator
+    auth_handler.before_select.side_effect = AllowAll
+    auth_handler.before_update.side_effect = AllowAll
+    auth_handler.before_insert.side_effect = AllowAllInsert
     register_hooks(auth_handler, post_auth_handler)
     return auth_handler, post_auth_handler
 

@@ -37,3 +37,15 @@ class AuthHandler(abc.ABC):
         Handle any select operations.
         """
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def before_insert(
+        self,
+        session: AuthorizedSession,
+        entity: ReferencedEntity,
+        values: list[dict[str, Any]],
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        """
+        Handle any select operations.
+        """
+        raise NotImplementedError

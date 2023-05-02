@@ -8,6 +8,7 @@ import structlog
 from sqlalchemy import (
     BindParameter,
     Column,
+    Insert,
     Update,
     event,
     inspect,
@@ -22,10 +23,18 @@ from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.authorization import StatementAuthorizer
-from sqlalchemy_auth_hooks.events import CreateSingleEvent, DeleteSingleEvent, Event, UpdateManyEvent, UpdateSingleEvent
+from sqlalchemy_auth_hooks.events import (
+    CreateManyEvent,
+    CreateSingleEvent,
+    DeleteSingleEvent,
+    Event,
+    UpdateManyEvent,
+    UpdateSingleEvent,
+)
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
+from sqlalchemy_auth_hooks.references import ReferencedEntity
 from sqlalchemy_auth_hooks.session import check_skip
-from sqlalchemy_auth_hooks.utils import extract_references, run_loop
+from sqlalchemy_auth_hooks.utils import extract_references, get_insert_columns, get_table_mapper, run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
@@ -128,6 +137,17 @@ class SQLAlchemyAuthHooks:
                     UpdateManyEvent(referenced_entity, conditions, updated_data)
                 )
 
+    def handle_insert(self, orm_execute_state: ORMExecuteState) -> None:
+        statement = cast(Insert, orm_execute_state.statement)
+        if "entity" not in statement.entity_description:
+            # ORM insert
+            return
+        reference = get_table_mapper(statement.entity_description["entity"])
+        inserted_data = get_insert_columns(statement)
+        self._pending_events[orm_execute_state.session][None].append(
+            CreateManyEvent(ReferencedEntity(reference, statement.table), inserted_data)
+        )
+
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if check_skip(orm_execute_state.session):
@@ -137,6 +157,9 @@ class SQLAlchemyAuthHooks:
         elif orm_execute_state.is_update:
             self.call_async(self._authorizer.authorize_update, orm_execute_state)
             self.handle_update(orm_execute_state)
+        elif orm_execute_state.is_insert:
+            self.call_async(self._authorizer.authorize_insert, orm_execute_state)
+            self.handle_insert(orm_execute_state)
 
 
 def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:

@@ -18,6 +18,7 @@ logger = structlog.get_logger()
 class CheckedPermissions(TypedDict):
     select: str | None
     update: str | None
+    insert: str | None
 
 
 class OsoAuthHandler(AuthHandler):
@@ -34,6 +35,7 @@ class OsoAuthHandler(AuthHandler):
         self.default_checked_permissions: CheckedPermissions = {
             "select": default_checked_permission,
             "update": default_checked_permission,
+            "insert": default_checked_permission,
         }
 
     async def authorize_action(
@@ -63,6 +65,12 @@ class OsoAuthHandler(AuthHandler):
         for referenced_entity in referenced_entities:
             async for rule in self.authorize_action(referenced_entity.entity, session, "update"):
                 yield rule
+
+    async def before_insert(
+        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        async for rule in self.authorize_action(entity.entity, session, "insert"):
+            yield rule
 
     async def before_select(
         self,
@@ -94,6 +102,12 @@ class OsoPostAuthHandler(PostAuthHandler):
         entity: ReferencedEntity,
         conditions: EntityConditions | None,
         changes: dict[str, Any],
+    ) -> None:
+        # Not relevant for Oso
+        pass
+
+    async def after_many_create(
+        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
     ) -> None:
         # Not relevant for Oso
         pass

@@ -28,12 +28,11 @@ class SingleMutationEvent(Event[_O], abc.ABC):
 
 
 class ManyMutationEvent(Event[_O], abc.ABC):
-    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None) -> None:
+    def __init__(self, entity: ReferencedEntity) -> None:
         self.entity = entity
-        self.conditions = conditions
 
     def __hash__(self) -> int:
-        return hash((self.entity, self.conditions))
+        return hash(self.entity)
 
 
 class CreateSingleEvent(SingleMutationEvent[_O]):
@@ -60,9 +59,20 @@ class UpdateSingleEvent(SingleMutationEvent[_O]):
 
 class UpdateManyEvent(ManyMutationEvent[_O]):
     def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None, changes: dict[str, Any]) -> None:
-        super().__init__(entity, conditions)
+        super().__init__(entity)
+        self.conditions = conditions
         self.changes = changes
 
     async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Update hook called")
         await handler.after_many_update(session, self.entity, self.conditions, self.changes)
+
+
+class CreateManyEvent(ManyMutationEvent[_O]):
+    def __init__(self, entity: ReferencedEntity, values: list[dict[str, Any]]) -> None:
+        super().__init__(entity)
+        self.values = values
+
+    async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
+        logger.debug("Update hook called")
+        await handler.after_many_create(session, self.entity, self.values)

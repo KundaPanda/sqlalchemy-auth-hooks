@@ -43,3 +43,15 @@ class PostAuthHandler(abc.ABC):
         Handle the deletion of an SQLAlchemy model.
         """
         raise NotImplementedError
+
+    @abc.abstractmethod
+    async def after_many_create(
+        self,
+        session: AuthorizedSession,
+        entity: ReferencedEntity,
+        values: list[dict[str, Any]],
+    ) -> None:
+        """
+        Handle the deletion of an SQLAlchemy model.
+        """
+        raise NotImplementedError

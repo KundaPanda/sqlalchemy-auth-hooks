@@ -6,13 +6,15 @@ import structlog
 from sqlalchemy import (
     BindParameter,
     ColumnClause,
+    Delete,
     FromClause,
+    Insert,
     Join,
     Select,
     Table,
     Update,
 )
-from sqlalchemy.orm import DeclarativeMeta, Mapper, ORMExecuteState
+from sqlalchemy.orm import DeclarativeBase, Mapper, ORMExecuteState
 from sqlalchemy.sql.elements import ColumnElement, ExpressionClauseList, UnaryExpression
 from sqlalchemy.sql.operators import and_, eq, ne
 from sqlalchemy.sql.selectable import Alias, ReturnsRows
@@ -173,13 +175,16 @@ def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], En
     return [entity for mapper_ref in results.values() for entity in mapper_ref.values()], conditions
 
 
-def extract_references(
-    statement: Update,
-) -> tuple[EntityConditions | None, dict[Mapper[Any], dict[Table, ReferencedEntity]]]:
-    entity_cls: DeclarativeMeta = statement.entity_description["entity"]
-    registry = entity_cls.registry
+def get_table_mapper(entity: DeclarativeBase) -> Mapper[Any]:
+    registry = entity.registry
     table_mappers: dict[FromClause, Mapper[Any]] = {mapper.local_table: mapper for mapper in registry.mappers}
-    mapper = table_mappers[statement.entity_description["table"]]
+    return table_mappers[entity.__table__]
+
+
+def extract_references(
+    statement: Update | Delete,
+) -> tuple[EntityConditions | None, dict[Mapper[Any], dict[Table, ReferencedEntity]]]:
+    mapper = get_table_mapper(statement.entity_description["entity"])
     references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
         mapper: {
             statement.entity_description["table"]: ReferencedEntity(
@@ -190,3 +195,13 @@ def extract_references(
     }
     conditions = traverse_conditions(statement.whereclause, {})
     return conditions, references
+
+
+def get_insert_columns(statement: Insert) -> list[dict[str, Any]]:
+    if statement._values:  # type: ignore
+        return [{c.name: v.effective_value for c, v in statement._values.items()}]  # type: ignore
+
+    results: list[dict[str, Any]] = []
+    for tuple_ in statement._multi_values:  # type: ignore
+        results.extend({cast(str, c.name): v for c, v in entry.items()} for entry in tuple_)  # type: ignore
+    return results
