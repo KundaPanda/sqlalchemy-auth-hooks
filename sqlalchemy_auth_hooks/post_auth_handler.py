@@ -1,13 +1,13 @@
 import abc
 from typing import Any
 
-from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
-class ORMPostAuthHandler(abc.ABC):
+class PostAuthHandler(abc.ABC):
     """
-    Abstract class with post authorization hooks (i.e. for update propagation)
+    Abstract class with post authorization callbacks (i.e. for update propagation)
     """
 
     @abc.abstractmethod
@@ -31,31 +31,15 @@ class ORMPostAuthHandler(abc.ABC):
         """
         raise NotImplementedError
 
-
-class CorePostAuthHandler(abc.ABC):
-    """
-    Abstract class for handling SQLAlchemy Core hook callbacks.
-    """
-
     @abc.abstractmethod
-    async def after_core_update(
+    async def after_many_update(
         self,
         session: AuthorizedSession,
-        referenced_entity: ReferencedEntity,
-        conditions: EntityConditions | None,
+        entity: ReferencedEntity,
+        conditions: ReferenceConditions | None,
         changes: dict[str, Any],
     ) -> None:
         """
         Handle the deletion of an SQLAlchemy model.
         """
         raise NotImplementedError
-
-
-class PostAuthHandler(
-    ORMPostAuthHandler,
-    CorePostAuthHandler,
-    abc.ABC,
-):
-    """
-    Abstract class for handling events after their processing (i.e. for state update propagation).
-    """

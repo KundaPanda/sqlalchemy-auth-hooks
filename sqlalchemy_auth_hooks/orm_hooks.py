@@ -7,23 +7,37 @@ from typing import Any, Callable, Coroutine, TypeVar, cast
 
 import structlog
 from sqlalchemy import (
+    BindParameter,
+    Column,
+    FromClause,
+    Table,
+    Update,
     event,
 )
-from sqlalchemy.orm import InstanceState, ORMExecuteState, Session, UOWTransaction, with_loader_criteria
+from sqlalchemy.orm import (
+    DeclarativeMeta,
+    InstanceState,
+    Mapper,
+    ORMExecuteState,
+    Session,
+    UOWTransaction,
+    with_loader_criteria,
+)
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.common_hooks import Hook
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
+from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
-from sqlalchemy_auth_hooks.utils import collect_entities, run_loop
+from sqlalchemy_auth_hooks.utils import collect_entities, run_loop, traverse_conditions
 
 logger: BoundLogger = structlog.get_logger()
 
 _O = TypeVar("_O")
 
 
-class MutationHook(Hook[_O], abc.ABC):
+class SingleMutationHook(Hook[_O], abc.ABC):
     def __init__(self, state: InstanceState[_O]) -> None:
         self.state = state
 
@@ -31,19 +45,28 @@ class MutationHook(Hook[_O], abc.ABC):
         return hash(self.state)
 
 
-class CreateHook(MutationHook[_O]):
+class ManyMutationHook(Hook[_O], abc.ABC):
+    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None) -> None:
+        self.entity = entity
+        self.conditions = conditions
+
+    def __hash__(self) -> int:
+        return hash((self.entity, self.conditions))
+
+
+class CreateHookSingle(SingleMutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Create hook called")
         await handler.after_single_create(session, self.state.object)
 
 
-class DeleteHook(MutationHook[_O]):
+class DeleteHookSingle(SingleMutationHook[_O]):
     async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
         logger.debug("Delete hook called")
         await handler.after_single_delete(session, self.state.object)
 
 
-class _UpdateHook(MutationHook[_O]):
+class UpdateHookSingle(SingleMutationHook[_O]):
     def __init__(self, state: InstanceState[_O], changes: dict[str, Any]) -> None:
         super().__init__(state)
         self.changes = changes
@@ -53,10 +76,20 @@ class _UpdateHook(MutationHook[_O]):
         await handler.after_single_update(session, self.state.object, self.changes)
 
 
+class UpdateManyHook(ManyMutationHook[_O]):
+    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None, changes: dict[str, Any]) -> None:
+        super().__init__(entity, conditions)
+        self.changes = changes
+
+    async def run(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
+        logger.debug("Update hook called")
+        await handler.after_many_update(session, self.entity, self.conditions, self.changes)
+
+
 T = TypeVar("T")
 
 
-class ORMHooks:
+class SQLAlchemyAuthHooks:
     def __init__(self, auth_handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
         self.auth_handler = auth_handler
         self.post_auth_handler = post_auth_handler
@@ -84,7 +117,7 @@ class ORMHooks:
                 if state.modified and state.has_identity and state.is_instance:
                     # Update
                     changes = self._get_state_changes(state)
-                    self._pending_hooks[session][state.identity_key].append(_UpdateHook(state, changes))
+                    self._pending_hooks[session][state.identity_key].append(UpdateHookSingle(state, changes))
 
     def after_flush_postexec(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush_postexec")
@@ -94,10 +127,10 @@ class ORMHooks:
             for state in states:
                 if not state.deleted and not state.detached and state.has_identity and state.is_instance:
                     # Create
-                    self._pending_hooks[session][state.identity_key].append(CreateHook(state))
+                    self._pending_hooks[session][state.identity_key].append(CreateHookSingle(state))
                 elif state.deleted and state.has_identity and state.is_instance:
                     # Delete
-                    self._pending_hooks[session][state.identity_key].append(DeleteHook(state))
+                    self._pending_hooks[session][state.identity_key].append(DeleteHookSingle(state))
 
     def after_commit(self, session: Session) -> None:
         logger.debug("after_commit")
@@ -120,30 +153,55 @@ class ORMHooks:
             return
         del self._pending_hooks[session]
 
+    def handle_update(self, session: AuthorizedSession, clause_element: Update) -> None:
+        if "entity" not in clause_element.entity_description:
+            # ORM update
+            return
+        entity_cls: DeclarativeMeta = clause_element.entity_description["entity"]
+        registry = entity_cls.registry
+        table_mappers: dict[FromClause, Mapper[Any]] = {mapper.local_table: mapper for mapper in registry.mappers}
+        mapper = table_mappers[clause_element.entity_description["table"]]
+
+        references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
+            mapper: {
+                clause_element.entity_description["table"]: ReferencedEntity(
+                    entity=mapper,
+                    selectable=clause_element.entity_description["table"],
+                )
+            }
+        }
+        conditions = traverse_conditions(clause_element.whereclause, {})
+
+        parameters = cast(dict[Column[Any], BindParameter[Any]], clause_element._values)  # type: ignore
+        updated_data: dict[str, Any] = {col.name: parameter.value for col, parameter in parameters.items()}
+        for mapped_dict in references.values():
+            for referenced_entity in mapped_dict.values():
+                self._pending_hooks[session][None].append(UpdateManyHook(referenced_entity, conditions, updated_data))
+
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if check_skip(orm_execute_state.session):
             return
+        session = cast(AuthorizedSession, orm_execute_state.session)
         if orm_execute_state.is_select:
             entities, conditions = collect_entities(orm_execute_state)
 
             async def prepare_filters() -> None:
-                async for selectable, filter_exp in self.auth_handler.before_select(
-                    cast(AuthorizedSession, orm_execute_state.session), entities, conditions
-                ):
+                async for selectable, filter_exp in self.auth_handler.before_select(session, entities, conditions):
                     where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
                     orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
 
             self.call_async(prepare_filters)
-            return
+        elif orm_execute_state.is_update:
+            self.handle_update(session, cast(Update, orm_execute_state.statement))
 
 
-def register_orm_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
+def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
     """
     Register hooks for SQLAlchemy ORM events.
     """
 
-    hooks = ORMHooks(handler, post_auth_handler)
+    hooks = SQLAlchemyAuthHooks(handler, post_auth_handler)
     event.listen(Session, "after_flush", hooks.after_flush)
     event.listen(Session, "after_flush_postexec", hooks.after_flush_postexec)
     event.listen(Session, "after_commit", hooks.after_commit)

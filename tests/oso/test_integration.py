@@ -1,4 +1,4 @@
-from sqlalchemy_auth_hooks.hooks import register_hooks
+from sqlalchemy_auth_hooks.orm_hooks import register_hooks
 from sqlalchemy_auth_hooks.oso.oso_handler import OsoAuthHandler, OsoPostAuthHandler
 from tests.core.conftest import User
 

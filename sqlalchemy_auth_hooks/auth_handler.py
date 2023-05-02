@@ -8,15 +8,9 @@ from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
-class ORMAuthHandler(abc.ABC):
+class AuthHandler(abc.ABC):
     """
-    Abstract class for ORM authorization checks
-    """
-
-
-class CoreAuthHandler(abc.ABC):
-    """
-    Abstract class for handling authorization of core database calls.
+    Abstract class for handling authorization of database calls.
     """
 
     @abc.abstractmethod
@@ -30,13 +24,3 @@ class CoreAuthHandler(abc.ABC):
         Handle any select operations.
         """
         raise NotImplementedError
-
-
-class AuthHandler(
-    ORMAuthHandler,
-    CoreAuthHandler,
-    abc.ABC,
-):
-    """
-    Abstract class for authorizing database calls.
-    """

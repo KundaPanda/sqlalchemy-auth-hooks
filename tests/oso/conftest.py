@@ -5,7 +5,7 @@ from oso import Oso
 from sqlalchemy import create_engine, delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from sqlalchemy_auth_hooks.hooks import register_hooks
+from sqlalchemy_auth_hooks.orm_hooks import register_hooks
 from sqlalchemy_auth_hooks.oso.oso_handler import OsoAuthHandler, OsoPostAuthHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import register_models
 from sqlalchemy_auth_hooks.session import (

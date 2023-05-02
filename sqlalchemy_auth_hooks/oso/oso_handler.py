@@ -60,7 +60,7 @@ class OsoPostAuthHandler(PostAuthHandler):
         # Not relevant for Oso
         pass
 
-    async def after_core_update(
+    async def after_many_update(
         self,
         session: AuthorizedSession,
         referenced_entity: ReferencedEntity,
