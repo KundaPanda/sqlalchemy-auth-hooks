@@ -12,7 +12,9 @@ def test_select(add_user, authorized_session, oso_handler):
 
 
 def test_select_no_permission(add_user, oso, authorized_session):
-    handler = OsoAuthHandler(oso=oso, checked_permissions={User: "other_permission"})
+    handler = OsoAuthHandler(
+        oso=oso, checked_permissions={User: {"update": "other_permission", "select": "other_permission"}}
+    )
     post_auth_handler = OsoPostAuthHandler()
     register_hooks(handler, post_auth_handler)
     with authorized_session as session:

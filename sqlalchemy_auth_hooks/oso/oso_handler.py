@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, cast
+from typing import Any, AsyncIterator, Iterable, TypedDict, cast
 
 import structlog
 from oso import Oso
@@ -15,15 +15,54 @@ from sqlalchemy_auth_hooks.session import AuthorizedSession
 logger = structlog.get_logger()
 
 
+class CheckedPermissions(TypedDict):
+    select: str | None
+    update: str | None
+
+
 class OsoAuthHandler(AuthHandler):
     def __init__(
-        self, oso: Oso, checked_permissions: dict[type[Any], str], default_checked_permission: str | None = None
+        self,
+        oso: Oso,
+        checked_permissions: dict[type[Any], CheckedPermissions],
+        default_checked_permission: str | None = None,
     ) -> None:
         self.oso = oso
-        self.checked_permissions: dict[Mapper[Any], str] = {
+        self.checked_permissions: dict[Mapper[Any], CheckedPermissions] = {
             cast(Mapper[Any], inspect(entity)).mapper: permission for entity, permission in checked_permissions.items()
         }
-        self.default_checked_permission = default_checked_permission
+        self.default_checked_permissions: CheckedPermissions = {
+            "select": default_checked_permission,
+            "update": default_checked_permission,
+        }
+
+    async def authorize_action(
+        self, referenced_entity: Mapper[Any], session: AuthorizedSession, permission: str
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        checked_permission = self.checked_permissions.get(referenced_entity, self.default_checked_permissions).get(
+            permission
+        )
+        if checked_permission is None:
+            logger.warning(f"No permission to check for {referenced_entity}")
+            yield referenced_entity, false()
+            return
+        filter_ = authorize_model(self.oso, session.user, checked_permission, session, referenced_entity.class_)
+        if filter_ is not None:
+            logger.debug("Filtering %s with %s", referenced_entity, filter_)
+            yield referenced_entity, filter_
+        else:
+            logger.warning("No filter for %s", referenced_entity)
+
+    async def before_update(
+        self,
+        session: AuthorizedSession,
+        referenced_entities: Iterable[ReferencedEntity],
+        conditions: EntityConditions | None,
+        changes: dict[str, Any],
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        for referenced_entity in referenced_entities:
+            async for rule in self.authorize_action(referenced_entity.entity, session, "update"):
+                yield rule
 
     async def before_select(
         self,
@@ -32,19 +71,8 @@ class OsoAuthHandler(AuthHandler):
         conditions: EntityConditions | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         for referenced_entity in referenced_entities:
-            checked_permission = self.checked_permissions.get(referenced_entity.entity, self.default_checked_permission)
-            if checked_permission is None:
-                logger.warning(f"No permission to check for {referenced_entity.entity}")
-                yield referenced_entity.entity, false()
-                return
-            filter_ = authorize_model(
-                self.oso, session.user, checked_permission, session, referenced_entity.entity.class_
-            )
-            if filter_ is not None:
-                logger.debug("Filtering %s with %s", referenced_entity.entity, filter_)
-                yield referenced_entity.entity, filter_
-            else:
-                logger.warning("No filter for %s", referenced_entity.entity)
+            async for rule in self.authorize_action(referenced_entity.entity, session, "select"):
+                yield rule
 
 
 class OsoPostAuthHandler(PostAuthHandler):

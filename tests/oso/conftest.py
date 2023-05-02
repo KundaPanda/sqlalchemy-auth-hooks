@@ -141,7 +141,7 @@ def oso(auth_user):
 
 @pytest.fixture
 def oso_handler(oso):
-    handler = OsoAuthHandler(oso=oso, checked_permissions={User: "query"})
+    handler = OsoAuthHandler(oso=oso, checked_permissions={User: {"select": "query", "update": "query"}})
     post_auth_handler = OsoPostAuthHandler()
     register_hooks(handler, post_auth_handler)
     return handler

@@ -10,8 +10,9 @@ from sqlalchemy import (
     Join,
     Select,
     Table,
+    Update,
 )
-from sqlalchemy.orm import Mapper, ORMExecuteState
+from sqlalchemy.orm import DeclarativeMeta, Mapper, ORMExecuteState
 from sqlalchemy.sql.elements import ColumnElement, ExpressionClauseList, UnaryExpression
 from sqlalchemy.sql.operators import and_, eq, ne
 from sqlalchemy.sql.selectable import Alias, ReturnsRows
@@ -170,3 +171,22 @@ def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], En
     )
 
     return [entity for mapper_ref in results.values() for entity in mapper_ref.values()], conditions
+
+
+def extract_references(
+    statement: Update,
+) -> tuple[EntityConditions | None, dict[Mapper[Any], dict[Table, ReferencedEntity]]]:
+    entity_cls: DeclarativeMeta = statement.entity_description["entity"]
+    registry = entity_cls.registry
+    table_mappers: dict[FromClause, Mapper[Any]] = {mapper.local_table: mapper for mapper in registry.mappers}
+    mapper = table_mappers[statement.entity_description["table"]]
+    references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
+        mapper: {
+            statement.entity_description["table"]: ReferencedEntity(
+                entity=mapper,
+                selectable=statement.entity_description["table"],
+            )
+        }
+    }
+    conditions = traverse_conditions(statement.whereclause, {})
+    return conditions, references

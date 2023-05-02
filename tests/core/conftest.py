@@ -1,13 +1,14 @@
+from typing import Any, AsyncIterable, Iterable
+
 import pytest
 from pytest_mock import MockerFixture
 from sqlalchemy import create_engine, delete, true
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import Session
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.hooks import register_hooks
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferencedEntity
 from sqlalchemy_auth_hooks.session import (
     AuthorizedAsyncSession,
     AuthorizedSession,
@@ -58,27 +59,23 @@ def authorized_async_session(async_engine, auth_user):
 @pytest.fixture
 def handlers(mocker: MockerFixture):
     class AsyncIterator:
-        def __init__(
-            self, session: Session, references: list[ReferencedEntity], conditions: ReferenceConditions | None
-        ):
-            self.session = session
-            self.references = references
-            self.conditions = conditions
-            self.pos = 0
+        def __init__(self, _session: AuthorizedSession, references: Iterable[ReferencedEntity], *_: Any, **__: Any):
+            self.references = iter(references)
 
         def __aiter__(self):
             return self
 
         async def __anext__(self):
-            if self.pos >= len(self.references):
-                raise StopAsyncIteration
-            val = self.references[self.pos]
-            self.pos += 1
+            try:
+                val = next(self.references)
+            except StopIteration as e:
+                raise StopAsyncIteration from e
             return val.entity, true()
 
     post_auth_handler = mocker.Mock(spec=PostAuthHandler)
     auth_handler = mocker.Mock(spec=AuthHandler)
     auth_handler.before_select.side_effect = AsyncIterator
+    auth_handler.before_update.side_effect = AsyncIterator
     register_hooks(auth_handler, post_auth_handler)
     return auth_handler, post_auth_handler
 

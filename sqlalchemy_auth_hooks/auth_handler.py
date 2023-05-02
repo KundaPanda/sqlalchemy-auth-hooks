@@ -1,5 +1,5 @@
 import abc
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Iterable
 
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
@@ -17,8 +17,21 @@ class AuthHandler(abc.ABC):
     def before_select(
         self,
         session: AuthorizedSession,
-        referenced_entities: list[ReferencedEntity],
+        referenced_entities: Iterable[ReferencedEntity],
         conditions: EntityConditions | None,
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        """
+        Handle any select operations.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def before_update(
+        self,
+        session: AuthorizedSession,
+        referenced_entities: Iterable[ReferencedEntity],
+        conditions: EntityConditions | None,
+        changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.

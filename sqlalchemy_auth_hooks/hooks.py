@@ -8,28 +8,24 @@ import structlog
 from sqlalchemy import (
     BindParameter,
     Column,
-    FromClause,
-    Table,
     Update,
     event,
+    inspect,
 )
 from sqlalchemy.orm import (
-    DeclarativeMeta,
     InstanceState,
-    Mapper,
     ORMExecuteState,
     Session,
     UOWTransaction,
-    with_loader_criteria,
 )
 from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
+from sqlalchemy_auth_hooks.authorization import StatementAuthorizer
 from sqlalchemy_auth_hooks.events import CreateSingleEvent, DeleteSingleEvent, Event, UpdateManyEvent, UpdateSingleEvent
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
-from sqlalchemy_auth_hooks.references import ReferencedEntity
-from sqlalchemy_auth_hooks.session import AuthorizedSession, check_skip
-from sqlalchemy_auth_hooks.utils import collect_entities, run_loop, traverse_conditions
+from sqlalchemy_auth_hooks.session import check_skip
+from sqlalchemy_auth_hooks.utils import extract_references, run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
@@ -46,6 +42,7 @@ class SQLAlchemyAuthHooks:
         self._loop = asyncio.new_event_loop()
         self._executor_thread = Thread(target=partial(run_loop, self._loop), daemon=True)
         self._executor_thread.start()
+        self._authorizer = StatementAuthorizer(self.auth_handler)
 
     def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
         future = asyncio.run_coroutine_threadsafe(func(*args), self._loop)
@@ -65,6 +62,22 @@ class SQLAlchemyAuthHooks:
                     # Update
                     changes = self._get_state_changes(state)
                     self._pending_events[session][state.identity_key].append(UpdateSingleEvent(state, changes))
+
+    def before_flush(
+        self, session: Session, flush_context: UOWTransaction, instances: list[InstanceState[Any]] | None
+    ) -> None:
+        logger.debug("before_flush")
+        if check_skip(session):
+            return
+        pending_updates = []
+        for instance in session.dirty:
+            state = inspect(instance)
+            if state.modified and state.has_identity and state.is_instance:
+                # Update
+                changes = self._get_state_changes(state)
+                pending_updates.append((state, changes))
+        if pending_updates:
+            self.call_async(self._authorizer.authorize_object_update, session, pending_updates)
 
     def after_flush_postexec(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush_postexec")
@@ -105,20 +118,7 @@ class SQLAlchemyAuthHooks:
         if "entity" not in statement.entity_description:
             # ORM update
             return
-        entity_cls: DeclarativeMeta = statement.entity_description["entity"]
-        registry = entity_cls.registry
-        table_mappers: dict[FromClause, Mapper[Any]] = {mapper.local_table: mapper for mapper in registry.mappers}
-        mapper = table_mappers[statement.entity_description["table"]]
-
-        references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
-            mapper: {
-                statement.entity_description["table"]: ReferencedEntity(
-                    entity=mapper,
-                    selectable=statement.entity_description["table"],
-                )
-            }
-        }
-        conditions = traverse_conditions(statement.whereclause, {})
+        conditions, references = extract_references(statement)
 
         parameters = cast(dict[Column[Any], BindParameter[Any]], statement._values)  # type: ignore
         updated_data: dict[str, Any] = {col.name: parameter.value for col, parameter in parameters.items()}
@@ -128,25 +128,14 @@ class SQLAlchemyAuthHooks:
                     UpdateManyEvent(referenced_entity, conditions, updated_data)
                 )
 
-    def handle_select(self, orm_execute_state: ORMExecuteState) -> None:
-        entities, conditions = collect_entities(orm_execute_state)
-
-        async def prepare_filters() -> None:
-            async for selectable, filter_exp in self.auth_handler.before_select(
-                cast(AuthorizedSession, orm_execute_state.session), entities, conditions
-            ):
-                where_clause = with_loader_criteria(selectable, filter_exp, include_aliases=True)
-                orm_execute_state.statement = orm_execute_state.statement.options(where_clause)
-
-        self.call_async(prepare_filters)
-
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if check_skip(orm_execute_state.session):
             return
         if orm_execute_state.is_select:
-            self.handle_select(orm_execute_state)
+            self.call_async(self._authorizer.authorize_select, orm_execute_state)
         elif orm_execute_state.is_update:
+            self.call_async(self._authorizer.authorize_update, orm_execute_state)
             self.handle_update(orm_execute_state)
 
 
@@ -157,6 +146,7 @@ def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> 
 
     hooks = SQLAlchemyAuthHooks(handler, post_auth_handler)
     event.listen(Session, "after_flush", hooks.after_flush)
+    event.listen(Session, "before_flush", hooks.before_flush)
     event.listen(Session, "after_flush_postexec", hooks.after_flush_postexec)
     event.listen(Session, "after_commit", hooks.after_commit)
     event.listen(Session, "after_rollback", hooks.after_rollback)
