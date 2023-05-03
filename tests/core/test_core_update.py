@@ -17,6 +17,18 @@ def test_update(engine, add_user, auth_handler, authorized_session):
     )
 
 
+async def test_update_async(async_engine, add_user_async, auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        await session.execute(update(User).where(User.id == add_user_async.id).values(name="Jane"))
+        await session.commit()
+    auth_handler.before_update.assert_called_once_with(
+        authorized_async_session.sync_session,
+        [ReferencedEntity(inspect(User), User.__table__)],
+        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user_async.id}}),
+        {"name": "Jane"},
+    )
+
+
 def test_update_all(engine, auth_handler, add_user, authorized_session):
     with authorized_session as session:
         session.execute(update(User).values(name="John", age=10))
