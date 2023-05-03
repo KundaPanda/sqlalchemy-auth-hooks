@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm.session import Session
 
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import register_models
+from sqlalchemy_auth_hooks.session import UnauthorizedSession
 
 from .models import ModelBase, Post, User
 
@@ -103,7 +104,7 @@ def engine(db_uri):
 
 @pytest.fixture
 def session(engine):
-    return Session(bind=engine)
+    return UnauthorizedSession(bind=engine)
 
 
 @pytest.fixture
