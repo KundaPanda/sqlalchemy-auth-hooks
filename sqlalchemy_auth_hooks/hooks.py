@@ -8,11 +8,11 @@ import structlog
 from sqlalchemy import (
     BindParameter,
     Column,
+    Delete,
     Insert,
     Update,
     event,
     inspect,
-    Delete,
 )
 from sqlalchemy.orm import (
     InstanceState,
@@ -27,11 +27,11 @@ from sqlalchemy_auth_hooks.authorization import StatementAuthorizer
 from sqlalchemy_auth_hooks.events import (
     CreateManyEvent,
     CreateSingleEvent,
+    DeleteManyEvent,
     DeleteSingleEvent,
     Event,
     UpdateManyEvent,
     UpdateSingleEvent,
-    DeleteManyEvent,
 )
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import ReferencedEntity
