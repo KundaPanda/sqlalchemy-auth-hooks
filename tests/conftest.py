@@ -48,8 +48,8 @@ Base = declarative_base()
 
 class UserGroup(Base):
     __tablename__ = "user_groups"
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True)
     group: Mapped["Group"] = relationship()
     user: Mapped["User"] = relationship()
 
@@ -59,14 +59,14 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     age: Mapped[int]
-    groups: Mapped[list["UserGroup"]] = relationship(back_populates="user")
+    groups: Mapped[list["UserGroup"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Group(Base):
     __tablename__ = "groups"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
-    users: Mapped[list["UserGroup"]] = relationship(back_populates="group")
+    users: Mapped[list["UserGroup"]] = relationship(back_populates="group", cascade="all, delete-orphan")
     parent_group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"))
     subgroups = relationship("Group", backref=backref("parent_group", remote_side=[id]))
 

@@ -92,14 +92,23 @@ class SQLAlchemyAuthHooks:
         if pending_inserts:
             self.call_async(self._authorizer.authorize_object_insert, session, pending_inserts)
 
+    def check_deletes(self, session: Session) -> None:
+        pending_deletes: list[InstanceState[Any]] = []
+        for instance in session.deleted:
+            state = inspect(instance)
+            pending_deletes.append(state)
+        if pending_deletes:
+            self.call_async(self._authorizer.authorize_object_delete, session, pending_deletes)
+
     def before_flush(
         self, session: Session, _flush_context: UOWTransaction, _instances: list[InstanceState[Any]] | None
     ) -> None:
         logger.debug("before_flush")
         if check_skip(session):
             return
-        self.check_updates(session)
         self.check_inserts(session)
+        self.check_deletes(session)
+        self.check_updates(session)
 
     def after_flush_postexec(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush_postexec")
