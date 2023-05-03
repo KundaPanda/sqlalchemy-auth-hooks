@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, TypedDict
 
 from sqlalchemy import Alias, FromClause, ReturnsRows
 from sqlalchemy.orm import Mapper
@@ -43,8 +43,13 @@ class CompositeConditions(EntityConditions):
         return f"ConditionsClause({self.operator}[{self.conditions}])"  # pragma: no cover
 
 
+class ConditionsDict(TypedDict):
+    operator: OperatorType
+    value: Any
+
+
 class ReferenceConditions(EntityConditions):
-    def __init__(self, selectable: Alias | FromClause, conditions: dict[str, Any]) -> None:
+    def __init__(self, selectable: Alias | FromClause, conditions: dict[str, ConditionsDict]) -> None:
         self.selectable = selectable
         self.conditions = conditions
 

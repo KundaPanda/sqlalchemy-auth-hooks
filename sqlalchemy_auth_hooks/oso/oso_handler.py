@@ -16,9 +16,10 @@ logger = structlog.get_logger()
 
 
 class CheckedPermissions(TypedDict):
-    select: str | None
-    update: str | None
     insert: str | None
+    delete: str | None
+    update: str | None
+    select: str | None
 
 
 class OsoAuthHandler(AuthHandler):
@@ -33,9 +34,10 @@ class OsoAuthHandler(AuthHandler):
             cast(Mapper[Any], inspect(entity)).mapper: permission for entity, permission in checked_permissions.items()
         }
         self.default_checked_permissions: CheckedPermissions = {
-            "select": default_checked_permission,
-            "update": default_checked_permission,
             "insert": default_checked_permission,
+            "delete": default_checked_permission,
+            "update": default_checked_permission,
+            "select": default_checked_permission,
         }
 
     async def authorize_action(
@@ -55,6 +57,22 @@ class OsoAuthHandler(AuthHandler):
         else:
             logger.warning("No filter for %s", referenced_entity)
 
+    async def before_insert(
+        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        async for rule in self.authorize_action(entity.entity, session, "insert"):
+            yield rule
+
+    async def before_delete(
+        self,
+        session: AuthorizedSession,
+        referenced_entities: list[ReferencedEntity],
+        conditions: EntityConditions | None,
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        for referenced_entity in referenced_entities:
+            async for rule in self.authorize_action(referenced_entity.entity, session, "delete"):
+                yield rule
+
     async def before_update(
         self,
         session: AuthorizedSession,
@@ -65,12 +83,6 @@ class OsoAuthHandler(AuthHandler):
         for referenced_entity in referenced_entities:
             async for rule in self.authorize_action(referenced_entity.entity, session, "update"):
                 yield rule
-
-    async def before_insert(
-        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
-    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
-        async for rule in self.authorize_action(entity.entity, session, "insert"):
-            yield rule
 
     async def before_select(
         self,
@@ -84,7 +96,7 @@ class OsoAuthHandler(AuthHandler):
 
 
 class OsoPostAuthHandler(PostAuthHandler):
-    async def after_single_create(self, session: AuthorizedSession, instance: Any) -> None:
+    async def after_single_insert(self, session: AuthorizedSession, instance: Any) -> None:
         # Not relevant for Oso
         pass
 
@@ -96,18 +108,23 @@ class OsoPostAuthHandler(PostAuthHandler):
         # Not relevant for Oso
         pass
 
+    async def after_many_insert(
+        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
+    ) -> None:
+        # Not relevant for Oso
+        pass
+
+    async def after_many_delete(
+        self, session: AuthorizedSession, entity: ReferencedEntity, conditions: EntityConditions | None
+    ) -> None:
+        pass
+
     async def after_many_update(
         self,
         session: AuthorizedSession,
         entity: ReferencedEntity,
         conditions: EntityConditions | None,
         changes: dict[str, Any],
-    ) -> None:
-        # Not relevant for Oso
-        pass
-
-    async def after_many_create(
-        self, session: AuthorizedSession, entity: ReferencedEntity, values: list[dict[str, Any]]
     ) -> None:
         # Not relevant for Oso
         pass

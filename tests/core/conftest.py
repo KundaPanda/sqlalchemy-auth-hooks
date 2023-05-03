@@ -90,6 +90,7 @@ def handlers(mocker: MockerFixture):
     auth_handler = mocker.Mock(spec=AuthHandler)
     auth_handler.before_select.side_effect = AllowAll
     auth_handler.before_update.side_effect = AllowAll
+    auth_handler.before_delete.side_effect = AllowAll
     auth_handler.before_insert.side_effect = AllowAllInsert
     register_hooks(auth_handler, post_auth_handler)
     return auth_handler, post_auth_handler

@@ -37,13 +37,13 @@ class ManyMutationEvent(Event[_O], abc.ABC):
 
 class CreateSingleEvent(SingleMutationEvent[_O]):
     async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
-        logger.debug("Create hook called")
-        await handler.after_single_create(session, self.state.object)
+        logger.debug("Create event triggered")
+        await handler.after_single_insert(session, self.state.object)
 
 
 class DeleteSingleEvent(SingleMutationEvent[_O]):
     async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
-        logger.debug("Delete hook called")
+        logger.debug("Delete event triggered")
         await handler.after_single_delete(session, self.state.object)
 
 
@@ -53,8 +53,28 @@ class UpdateSingleEvent(SingleMutationEvent[_O]):
         self.changes = changes
 
     async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
-        logger.debug("Update hook called")
+        logger.debug("Update event triggered")
         await handler.after_single_update(session, self.state.object, self.changes)
+
+
+class CreateManyEvent(ManyMutationEvent[_O]):
+    def __init__(self, entity: ReferencedEntity, values: list[dict[str, Any]]) -> None:
+        super().__init__(entity)
+        self.values = values
+
+    async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
+        logger.debug("Create many event triggered")
+        await handler.after_many_insert(session, self.entity, self.values)
+
+
+class DeleteManyEvent(ManyMutationEvent[_O]):
+    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None) -> None:
+        super().__init__(entity)
+        self.conditions = conditions
+
+    async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
+        logger.debug("Delete many event triggered")
+        await handler.after_many_delete(session, self.entity, self.conditions)
 
 
 class UpdateManyEvent(ManyMutationEvent[_O]):
@@ -64,15 +84,5 @@ class UpdateManyEvent(ManyMutationEvent[_O]):
         self.changes = changes
 
     async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
-        logger.debug("Update hook called")
+        logger.debug("Update many event triggered")
         await handler.after_many_update(session, self.entity, self.conditions, self.changes)
-
-
-class CreateManyEvent(ManyMutationEvent[_O]):
-    def __init__(self, entity: ReferencedEntity, values: list[dict[str, Any]]) -> None:
-        super().__init__(entity)
-        self.values = values
-
-    async def trigger(self, session: AuthorizedSession, handler: PostAuthHandler) -> None:
-        logger.debug("Update hook called")
-        await handler.after_many_create(session, self.entity, self.values)

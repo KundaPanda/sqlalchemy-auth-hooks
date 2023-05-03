@@ -26,12 +26,11 @@ class AuthHandler(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def before_update(
+    def before_insert(
         self,
         session: AuthorizedSession,
-        referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
-        changes: dict[str, Any],
+        entity: ReferencedEntity,
+        values: list[dict[str, Any]],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.
@@ -39,11 +38,24 @@ class AuthHandler(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def before_insert(
+    def before_delete(
         self,
         session: AuthorizedSession,
-        entity: ReferencedEntity,
-        values: list[dict[str, Any]],
+        referenced_entities: list[ReferencedEntity],
+        conditions: EntityConditions | None,
+    ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
+        """
+        Handle any select operations.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def before_update(
+        self,
+        session: AuthorizedSession,
+        referenced_entities: list[ReferencedEntity],
+        conditions: EntityConditions | None,
+        changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.

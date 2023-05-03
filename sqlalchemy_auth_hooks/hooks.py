@@ -12,6 +12,7 @@ from sqlalchemy import (
     Update,
     event,
     inspect,
+    Delete,
 )
 from sqlalchemy.orm import (
     InstanceState,
@@ -30,6 +31,7 @@ from sqlalchemy_auth_hooks.events import (
     Event,
     UpdateManyEvent,
     UpdateSingleEvent,
+    DeleteManyEvent,
 )
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import ReferencedEntity
@@ -148,6 +150,18 @@ class SQLAlchemyAuthHooks:
             CreateManyEvent(ReferencedEntity(reference, statement.table), inserted_data)
         )
 
+    def handle_delete(self, orm_execute_state: ORMExecuteState) -> None:
+        statement = cast(Delete, orm_execute_state.statement)
+        if "entity" not in statement.entity_description:
+            # ORM delete
+            return
+        conditions, references = extract_references(statement)
+        for mapped_dict in references.values():
+            for referenced_entity in mapped_dict.values():
+                self._pending_events[orm_execute_state.session][None].append(
+                    DeleteManyEvent(referenced_entity, conditions)
+                )
+
     def do_orm_execute(self, orm_execute_state: ORMExecuteState) -> None:
         logger.debug("do_orm_execute")
         if check_skip(orm_execute_state.session):
@@ -160,6 +174,11 @@ class SQLAlchemyAuthHooks:
         elif orm_execute_state.is_insert:
             self.call_async(self._authorizer.authorize_insert, orm_execute_state)
             self.handle_insert(orm_execute_state)
+        elif orm_execute_state.is_delete:
+            self.call_async(self._authorizer.authorize_delete, orm_execute_state)
+            self.handle_delete(orm_execute_state)
+        else:
+            logger.debug("Unhandled ORM execute type: %s", orm_execute_state)
 
 
 def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
