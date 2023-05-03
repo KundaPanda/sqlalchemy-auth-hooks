@@ -88,6 +88,18 @@ class StatementAuthorizer:
                     session.rollback()
                     return
 
+    async def authorize_object_insert(self, session: AuthorizedSession, states: Iterable[InstanceState[Any]]) -> None:
+        for state in states:
+            mapper: Mapper[Any] = state.mapper  # type: ignore
+            async for _, filter_exp in self.auth_handler.before_insert(
+                session,
+                ReferencedEntity(mapper, state.class_.__table__),
+                [{k: v for k, v in state.dict.items() if k in mapper.columns}],
+            ):
+                if filter_exp != true():
+                    session.rollback()
+                    return
+
     async def authorize_select(self, orm_execute_state: ORMExecuteState) -> None:
         entities, conditions = collect_entities(orm_execute_state)
 

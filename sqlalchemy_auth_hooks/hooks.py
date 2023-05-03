@@ -74,21 +74,32 @@ class SQLAlchemyAuthHooks:
                     changes = self._get_state_changes(state)
                     self._pending_events[session][state.identity_key].append(UpdateSingleEvent(state, changes))
 
+    def check_updates(self, session: Session) -> None:
+        pending_updates: list[tuple[InstanceState[Any], dict[str, Any]]] = []
+        for instance in session.dirty:
+            state = inspect(instance)
+            if state.modified and state.has_identity and state.is_instance:
+                changes = self._get_state_changes(state)
+                pending_updates.append((state, changes))
+        if pending_updates:
+            self.call_async(self._authorizer.authorize_object_update, session, pending_updates)
+
+    def check_inserts(self, session: Session) -> None:
+        pending_inserts: list[InstanceState[Any]] = []
+        for instance in session.new:
+            state = inspect(instance)
+            pending_inserts.append(state)
+        if pending_inserts:
+            self.call_async(self._authorizer.authorize_object_insert, session, pending_inserts)
+
     def before_flush(
         self, session: Session, _flush_context: UOWTransaction, _instances: list[InstanceState[Any]] | None
     ) -> None:
         logger.debug("before_flush")
         if check_skip(session):
             return
-        pending_updates: list[tuple[InstanceState[Any], dict[str, Any]]] = []
-        for instance in session.dirty:
-            state = inspect(instance)
-            if state.modified and state.has_identity and state.is_instance:
-                # Update
-                changes = self._get_state_changes(state)
-                pending_updates.append((state, changes))
-        if pending_updates:
-            self.call_async(self._authorizer.authorize_object_update, session, pending_updates)
+        self.check_updates(session)
+        self.check_inserts(session)
 
     def after_flush_postexec(self, session: Session, flush_context: UOWTransaction) -> None:
         logger.debug("after_flush_postexec")
