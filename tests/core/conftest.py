@@ -92,17 +92,22 @@ def handlers(mocker: MockerFixture):
     auth_handler.before_update.side_effect = AllowAll
     auth_handler.before_delete.side_effect = AllowAll
     auth_handler.before_insert.side_effect = AllowAllInsert
-    register_hooks(auth_handler, post_auth_handler)
-    return auth_handler, post_auth_handler
+    hooks = register_hooks(auth_handler, post_auth_handler)
+    return hooks, auth_handler, post_auth_handler
 
 
 @pytest.fixture
 def post_auth_handler(engine, handlers):
-    return handlers[1]
+    return handlers[2]
 
 
 @pytest.fixture
 def auth_handler(engine, handlers):
+    return handlers[1]
+
+
+@pytest.fixture
+def hooks(engine, handlers):
     return handlers[0]
 
 

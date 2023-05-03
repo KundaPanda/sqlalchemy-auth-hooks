@@ -55,6 +55,10 @@ class SQLAlchemyAuthHooks:
         self._executor_thread.start()
         self._authorizer = StatementAuthorizer(self.auth_handler)
 
+    @property
+    def authorizer(self) -> StatementAuthorizer:
+        return self._authorizer
+
     def call_async(self, func: Callable[..., Coroutine[T, None, Any]], *args: Any) -> T:
         future = asyncio.run_coroutine_threadsafe(func(*args), self._loop)
         return future.result()
@@ -201,7 +205,7 @@ class SQLAlchemyAuthHooks:
             logger.debug("Unhandled ORM execute type: %s", orm_execute_state)
 
 
-def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> None:
+def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> SQLAlchemyAuthHooks:
     """
     Register hooks for SQLAlchemy ORM events.
     """
@@ -213,3 +217,4 @@ def register_hooks(handler: AuthHandler, post_auth_handler: PostAuthHandler) -> 
     event.listen(Session, "after_commit", hooks.after_commit)
     event.listen(Session, "after_rollback", hooks.after_rollback)
     event.listen(Session, "do_orm_execute", hooks.do_orm_execute)
+    return hooks

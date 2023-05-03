@@ -1,3 +1,4 @@
+import copy
 from typing import Any, Iterable, cast
 
 from sqlalchemy import (
@@ -46,6 +47,10 @@ class StatementAuthorizer:
         entity = ReferencedEntity(
             entity=get_table_mapper(statement.entity_description["entity"]), selectable=statement.table
         )
+        if statement.select is not None:
+            new_state = copy.copy(orm_execute_state)
+            new_state.statement = statement.select
+            await self.authorize_select(new_state)
         columns = get_insert_columns(statement)
         async for selectable, filter_exp in self.auth_handler.before_insert(
             cast(AuthorizedSession, orm_execute_state.session),
