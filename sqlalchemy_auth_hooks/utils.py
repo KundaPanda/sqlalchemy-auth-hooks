@@ -24,6 +24,7 @@ from sqlalchemy_auth_hooks.references import (
     EntityConditions,
     ReferenceConditions,
     ReferencedEntity,
+    DynamicValue,
 )
 
 logger = structlog.get_logger()
@@ -81,8 +82,15 @@ def _process_condition(
                 selectable=selectable,
                 conditions={key_name: {"operator": condition.operator, "value": key_value}},
             )
+        elif isinstance(right, ColumnClause):
+            key_value = DynamicValue(right)
+            key_name = left.name
+            return ReferenceConditions(
+                selectable=selectable,
+                conditions={key_name: {"operator": condition.operator, "value": key_value}},
+            )
         else:
-            # Both are columns, not interesting
+            # What else could it be?
             return
 
 

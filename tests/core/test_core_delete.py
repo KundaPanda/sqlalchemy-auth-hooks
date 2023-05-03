@@ -1,7 +1,7 @@
 from sqlalchemy import delete, inspect, true
-from sqlalchemy.sql.operators import eq
+from sqlalchemy.sql.operators import eq, gt
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity, DynamicValue
 from tests.core.conftest import User
 
 
@@ -46,4 +46,15 @@ def test_delete_all2(engine, add_user, auth_handler, authorized_session):
         authorized_session,
         [ReferencedEntity(inspect(User), User.__table__)],
         None,
+    )
+
+
+def test_delete_dynamic_condition(engine, add_user, auth_handler, authorized_session):
+    with authorized_session as session:
+        session.execute(delete(User).where(User.name > User.id))
+        session.commit()
+    auth_handler.before_delete.assert_called_once_with(
+        authorized_session,
+        [ReferencedEntity(inspect(User), User.__table__)],
+        ReferenceConditions(User.__table__, {"name": {"operator": gt, "value": DynamicValue(User.id)}}),
     )

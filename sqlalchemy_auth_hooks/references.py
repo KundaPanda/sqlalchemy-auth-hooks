@@ -1,6 +1,6 @@
 from typing import Any, TypedDict
 
-from sqlalchemy import Alias, FromClause, ReturnsRows
+from sqlalchemy import Alias, ColumnClause, FromClause, ReturnsRows
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.operators import OperatorType
 
@@ -62,3 +62,17 @@ class ReferenceConditions(EntityConditions):
 
     def __repr__(self) -> str:
         return f"ReferenceConditions({self.selectable}, {self.conditions})"  # pragma: no cover
+
+
+class DynamicValue:
+    def __init__(self, ref: ColumnClause) -> None:
+        self.ref = ref
+
+    def __str__(self) -> str:
+        return f"DynamicValue({self.ref.table}.{self.ref.name})"
+
+    def __repr__(self) -> str:
+        return str(self)  # pragma: no cover
+
+    def __eq__(self, other: object) -> bool:
+        return self.ref == other.ref if isinstance(other, DynamicValue) else False
