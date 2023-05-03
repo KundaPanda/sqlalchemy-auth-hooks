@@ -16,6 +16,17 @@ def test_insert(engine, add_user, auth_handler, authorized_session):
     )
 
 
+async def test_insert_async(async_engine, add_user_async, auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        await session.execute(insert(User).values(name="Jane", age=10))
+        await session.commit()
+    auth_handler.before_insert.assert_called_once_with(
+        authorized_async_session.sync_session,
+        ReferencedEntity(inspect(User), User.__table__),
+        [{"name": "Jane", "age": 10}],
+    )
+
+
 def test_insert_tuple(engine, add_user, auth_handler, authorized_session):
     with authorized_session as session:
         session.execute(insert(User).values((100, "Jane", 10)))
