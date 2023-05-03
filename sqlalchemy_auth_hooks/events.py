@@ -5,7 +5,7 @@ import structlog
 from sqlalchemy.orm import InstanceState
 
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
-from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import EntityCondition, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 logger = structlog.get_logger()
@@ -68,7 +68,7 @@ class CreateManyEvent(ManyMutationEvent[_O]):
 
 
 class DeleteManyEvent(ManyMutationEvent[_O]):
-    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None) -> None:
+    def __init__(self, entity: ReferencedEntity, conditions: EntityCondition | None) -> None:
         super().__init__(entity)
         self.conditions = conditions
 
@@ -78,7 +78,7 @@ class DeleteManyEvent(ManyMutationEvent[_O]):
 
 
 class UpdateManyEvent(ManyMutationEvent[_O]):
-    def __init__(self, entity: ReferencedEntity, conditions: EntityConditions | None, changes: dict[str, Any]) -> None:
+    def __init__(self, entity: ReferencedEntity, conditions: EntityCondition | None, changes: dict[str, Any]) -> None:
         super().__init__(entity)
         self.conditions = conditions
         self.changes = changes

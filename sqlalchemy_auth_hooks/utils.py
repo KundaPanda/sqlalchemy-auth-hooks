@@ -13,18 +13,22 @@ from sqlalchemy import (
     Select,
     Table,
     Update,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapper, ORMExecuteState
-from sqlalchemy.sql.elements import ColumnElement, ExpressionClauseList, UnaryExpression
-from sqlalchemy.sql.operators import and_, eq, ne
+from sqlalchemy.sql.elements import BinaryExpression, ColumnElement, ExpressionClauseList, UnaryExpression
+from sqlalchemy.sql.operators import and_, is_true
 from sqlalchemy.sql.selectable import Alias, ReturnsRows
 
 from sqlalchemy_auth_hooks.references import (
-    CompositeConditions,
-    DynamicValue,
-    EntityConditions,
-    ReferenceConditions,
+    CompositeCondition,
+    EntityCondition,
+    Expression,
+    LiteralExpression,
+    NestedExpression,
+    ReferenceCondition,
     ReferencedEntity,
+    UnaryCondition,
 )
 
 logger = structlog.get_logger()
@@ -50,63 +54,58 @@ def get_parameter_value(
         return effective_value
 
 
+def _process_expr(
+    expr: ColumnElement[Any] | BindParameter[Any],
+    parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
+) -> ColumnClause[Any] | Expression | NestedExpression | LiteralExpression | None:
+    if isinstance(expr, BindParameter):
+        return LiteralExpression(get_parameter_value(expr, parameters))
+
+    if isinstance(expr, BinaryExpression):
+        left = _process_expr(expr.left, parameters)
+        right = _process_expr(expr.right, parameters)
+        if isinstance(left, (Expression, NestedExpression)) or isinstance(right, (Expression, NestedExpression)):
+            return NestedExpression(operator=expr.operator, left=left, right=right)
+        if isinstance(left, ColumnClause):
+            return Expression(operator=expr.operator, left=left, right=right)
+        if isinstance(right, ColumnClause):
+            return Expression(operator=expr.operator, left=left, right=right)
+        logger.warning("Could not process expression", expr=expr, left=left, right=right)
+        return None
+
+    if isinstance(expr, ColumnClause):
+        return expr
+
+
 def _process_condition(
     condition: ColumnElement[Any],
     parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
-) -> ReferenceConditions | None:
+) -> EntityCondition | None:
     if isinstance(condition, UnaryExpression):
-        return
+        if condition.operator == is_true and condition.element == true():
+            # Ignore 1 = 1 conditions
+            return None
+        return UnaryCondition(operator=condition.operator, value=condition.element)
 
-    if isinstance(condition.left, ColumnClause):
-        left: ColumnClause[Any] = condition.left
-        right = condition.right
-    elif isinstance(condition.right, ColumnClause) and condition.operator in (eq, ne):
-        left: ColumnClause[Any] = condition.right
-        right = condition.left
-    else:
-        # We only care about conditions that involve columns
-        logger.warning(f"Skipping condition {condition.compile()}")
-        return None
-
-    selectable = left.table
-    if selectable is None:
-        return None
-
-    table = selectable.element if isinstance(selectable, Alias) else selectable
-
-    if isinstance(table, Table):
-        if isinstance(right, BindParameter):
-            parameter = cast(BindParameter[Any], right)
-            key_value = get_parameter_value(parameter, parameters)
-            key_name = left.name
-            return ReferenceConditions(
-                selectable=selectable,
-                conditions={key_name: {"operator": condition.operator, "value": key_value}},
-            )
-        elif isinstance(right, ColumnClause):
-            key_value = DynamicValue(right)
-            key_name = left.name
-            return ReferenceConditions(
-                selectable=selectable,
-                conditions={key_name: {"operator": condition.operator, "value": key_value}},
-            )
-        else:
-            # What else could it be?
-            logger.warning(f"Skipping condition {condition.compile()} for {right}")
-            return
-    logger.warning(f"Skipping condition {condition.compile()} for {table.compile()}")
+    left_expr = _process_expr(condition.left, parameters)
+    right_expr = _process_expr(condition.right, parameters)
+    return ReferenceCondition(
+        left=left_expr,
+        operator=condition.operator,
+        right=right_expr,
+    )
 
 
 def traverse_conditions(
     condition: ColumnElement[Any] | None,
     parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
-) -> EntityConditions | None:
+) -> EntityCondition | None:
     if condition is None:
         return None
 
     if not isinstance(condition, ExpressionClauseList):
         return _process_condition(condition, parameters)
-    conditions = CompositeConditions(conditions=[], operator=condition.operator)
+    conditions = CompositeCondition(conditions=[], operator=condition.operator)
     for child in condition.clauses:
         if child_condition := traverse_conditions(child, parameters):
             conditions.conditions.append(child_condition)
@@ -126,25 +125,33 @@ def _extract_mappers_from_clause(
         yield next(_extract_mappers_from_clause(clause.element, table_mappers))[0], clause.selectable
 
 
+def _process_join_clause(
+    from_clause: Join, parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None
+) -> list[EntityCondition]:
+    all_conditions: list[EntityCondition] = []
+    if isinstance(from_clause.onclause, ExpressionClauseList):
+        for clause in from_clause.onclause.clauses:
+            condition = traverse_conditions(clause, parameters)
+            if condition is not None:
+                all_conditions.append(condition)
+    elif isinstance(from_clause.onclause, ColumnElement):
+        condition = traverse_conditions(from_clause.onclause, parameters)
+        if condition is not None:
+            all_conditions.append(condition)
+    return all_conditions
+
+
 def process_clauses(
     froms: Sequence[FromClause],
     intermediate_result: dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]],
     where_clause: Any,
     parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]],
     table_mappers: dict[FromClause, Mapper[Any]],
-) -> tuple[dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]], EntityConditions | None]:
-    all_conditions: list[EntityConditions] = []
+) -> tuple[dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]], EntityCondition | None]:
+    all_conditions: list[EntityCondition] = []
     for from_clause in froms:
         if isinstance(from_clause, Join):
-            if isinstance(from_clause.onclause, ExpressionClauseList):
-                for clause in from_clause.onclause.clauses:
-                    condition = traverse_conditions(clause, parameters)
-                    if condition is not None:
-                        all_conditions.append(condition)
-            elif isinstance(from_clause.onclause, ColumnElement):
-                condition = traverse_conditions(from_clause.onclause, parameters)
-                if condition is not None:
-                    all_conditions.append(condition)
+            all_conditions.extend(_process_join_clause(from_clause, parameters))
 
         for mapper, selectable in _extract_mappers_from_clause(from_clause, table_mappers):
             intermediate_result[mapper][selectable] = ReferencedEntity(entity=mapper, selectable=selectable)
@@ -160,12 +167,12 @@ def process_clauses(
     elif not all_conditions:
         conditions = None
     else:
-        conditions = CompositeConditions(conditions=all_conditions, operator=and_)
+        conditions = CompositeCondition(conditions=all_conditions, operator=and_)
 
     return intermediate_result, conditions
 
 
-def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityConditions | None]:
+def collect_entities(state: ORMExecuteState) -> tuple[list[ReferencedEntity], EntityCondition | None]:
     intermediate_result: dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]] = defaultdict(dict)
 
     if not isinstance(state.statement, Select):
@@ -199,7 +206,7 @@ def get_table_mapper(entity: DeclarativeBase) -> Mapper[Any]:
 
 def extract_references(
     statement: Update | Delete,
-) -> tuple[EntityConditions | None, dict[Mapper[Any], dict[Table, ReferencedEntity]]]:
+) -> tuple[EntityCondition | None, dict[Mapper[Any], dict[Table, ReferencedEntity]]]:
     mapper = get_table_mapper(statement.entity_description["entity"])
     references: dict[Mapper[Any], dict[Table, ReferencedEntity]] = {
         mapper: {

@@ -1,7 +1,7 @@
 from sqlalchemy import inspect
 from sqlalchemy.sql.operators import eq
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import LiteralExpression, ReferenceCondition, ReferencedEntity
 from tests.core.conftest import User
 
 
@@ -13,7 +13,11 @@ def test_update(engine, add_user, auth_handler, authorized_session):
     auth_handler.before_update.assert_called_once_with(
         authorized_session,
         [ReferencedEntity(inspect(User), User.__table__)],
-        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
         {"name": "Jane"},
     )
 
@@ -26,7 +30,11 @@ async def test_update_async(async_engine, add_user_async, auth_handler, authoriz
     auth_handler.before_update.assert_called_once_with(
         authorized_async_session.sync_session,
         [ReferencedEntity(inspect(User), User.__table__)],
-        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user_async.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user_async.id),
+        ),
         {"name": "Jane"},
     )
 
@@ -41,13 +49,21 @@ def test_update_multiple_same_column(engine, add_user, auth_handler, authorized_
     auth_handler.before_update.assert_any_call(
         authorized_session,
         [ReferencedEntity(inspect(User), User.__table__)],
-        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
         {"name": "Jane"},
     )
     auth_handler.before_update.assert_called_with(
         authorized_session,
         [ReferencedEntity(inspect(User), User.__table__)],
-        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
         {"name": "Jill"},
     )
     assert auth_handler.before_update.call_count == 2
@@ -62,7 +78,11 @@ def test_update_multiple_different_columns(engine, add_user, auth_handler, autho
     auth_handler.before_update.assert_called_with(
         authorized_session,
         [ReferencedEntity(inspect(User), User.__table__)],
-        ReferenceConditions(User.__table__, {"id": {"operator": eq, "value": add_user.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
         {"name": "Jane", "age": 43},
     )
 

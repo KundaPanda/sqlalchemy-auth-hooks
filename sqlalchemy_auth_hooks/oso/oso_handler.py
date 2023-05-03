@@ -9,7 +9,7 @@ from sqlalchemy.sql.roles import ExpressionElementRole
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.auth import authorize_model
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
-from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import EntityCondition, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 logger = structlog.get_logger()
@@ -67,7 +67,7 @@ class OsoAuthHandler(AuthHandler):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         for referenced_entity in referenced_entities:
             async for rule in self.authorize_action(referenced_entity.entity, session, "delete"):
@@ -77,7 +77,7 @@ class OsoAuthHandler(AuthHandler):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
         changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         for referenced_entity in referenced_entities:
@@ -88,7 +88,7 @@ class OsoAuthHandler(AuthHandler):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         for referenced_entity in referenced_entities:
             async for rule in self.authorize_action(referenced_entity.entity, session, "select"):
@@ -115,7 +115,7 @@ class OsoPostAuthHandler(PostAuthHandler):
         pass
 
     async def after_many_delete(
-        self, session: AuthorizedSession, entity: ReferencedEntity, conditions: EntityConditions | None
+        self, session: AuthorizedSession, entity: ReferencedEntity, conditions: EntityCondition | None
     ) -> None:
         pass
 
@@ -123,7 +123,7 @@ class OsoPostAuthHandler(PostAuthHandler):
         self,
         session: AuthorizedSession,
         entity: ReferencedEntity,
-        conditions: EntityConditions | None,
+        conditions: EntityCondition | None,
         changes: dict[str, Any],
     ) -> None:
         # Not relevant for Oso

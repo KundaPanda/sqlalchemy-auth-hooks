@@ -1,9 +1,11 @@
 from sqlalchemy import inspect, literal, select
-from sqlalchemy.sql.operators import and_, eq, or_, startswith_op
+from sqlalchemy.sql.operators import and_, concat_op, eq, or_, startswith_op
 
 from sqlalchemy_auth_hooks.references import (
-    CompositeConditions,
-    ReferenceConditions,
+    CompositeCondition,
+    Expression,
+    LiteralExpression,
+    ReferenceCondition,
     ReferencedEntity,
 )
 from tests.core.conftest import User, UserGroup
@@ -22,7 +24,11 @@ def test_simple_select(engine, add_user, auth_handler, authorized_session):
                 selectable=selectable,
             ),
         ],
-        ReferenceConditions(selectable, {"id": {"operator": eq, "value": 1}}),
+        ReferenceCondition(
+            left=selectable.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
     )
 
 
@@ -39,7 +45,11 @@ def test_simple_select_where(engine, add_user, auth_handler, authorized_session)
                 selectable=selectable,
             ),
         ],
-        ReferenceConditions(selectable, {"id": {"operator": eq, "value": 1}}),
+        ReferenceCondition(
+            left=selectable.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
     )
 
 
@@ -56,7 +66,11 @@ def test_simple_select_column_only(engine, add_user, auth_handler, authorized_se
                 selectable=selectable,
             ),
         ],
-        ReferenceConditions(selectable, {"id": {"operator": eq, "value": 1}}),
+        ReferenceCondition(
+            left=selectable.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
     )
 
 
@@ -73,11 +87,19 @@ def test_select_multiple_pk(engine, add_user, user_group, auth_handler, authoriz
                 selectable=selectable,
             ),
         ],
-        CompositeConditions(
+        CompositeCondition(
             operator=and_,
             conditions=[
-                ReferenceConditions(selectable, {"user_id": {"operator": eq, "value": 1}}),
-                ReferenceConditions(selectable, {"group_id": {"operator": eq, "value": 1}}),
+                ReferenceCondition(
+                    left=selectable.c.user_id,
+                    operator=eq,
+                    right=LiteralExpression(add_user.id),
+                ),
+                ReferenceCondition(
+                    left=selectable.c.group_id,
+                    operator=eq,
+                    right=LiteralExpression(user_group.id),
+                ),
             ],
         ),
     )
@@ -96,25 +118,28 @@ def test_select_multiple_conditions(engine, add_user, user_group, auth_handler, 
                 selectable=selectable,
             ),
         ],
-        CompositeConditions(
+        CompositeCondition(
             operator=or_,
             conditions=[
-                CompositeConditions(
+                CompositeCondition(
                     operator=and_,
                     conditions=[
-                        ReferenceConditions(
-                            selectable=selectable,
-                            conditions={"id": {"operator": eq, "value": 1}},
+                        ReferenceCondition(
+                            left=selectable.c.id,
+                            operator=eq,
+                            right=LiteralExpression(add_user.id),
                         ),
-                        ReferenceConditions(
-                            selectable=selectable,
-                            conditions={"name": {"operator": startswith_op, "value": "Jo"}},
+                        ReferenceCondition(
+                            left=selectable.c.name,
+                            operator=startswith_op,
+                            right=LiteralExpression("Jo"),
                         ),
                     ],
                 ),
-                ReferenceConditions(
-                    selectable=selectable,
-                    conditions={"id": {"operator": eq, "value": 2}},
+                ReferenceCondition(
+                    left=selectable.c.id,
+                    operator=eq,
+                    right=LiteralExpression(2),
                 ),
             ],
         ),
@@ -134,5 +159,9 @@ def test_simple_select_func(engine, add_user, auth_handler, authorized_session):
                 selectable=selectable,
             ),
         ],
-        None,
+        ReferenceCondition(
+            left=Expression(left=selectable.c.name, operator=concat_op, right=LiteralExpression(" NAME")),
+            operator=eq,
+            right=LiteralExpression("John NAME"),
+        ),
     )

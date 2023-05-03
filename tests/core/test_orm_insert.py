@@ -1,7 +1,7 @@
 from sqlalchemy import inspect
 from sqlalchemy.sql.operators import eq
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceCondition, ReferencedEntity
 from tests.conftest import Group
 from tests.core.conftest import User
 

@@ -4,7 +4,7 @@ from typing import Any, AsyncIterator
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.roles import ExpressionElementRole
 
-from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import EntityCondition, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
@@ -18,7 +18,7 @@ class AuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.
@@ -42,7 +42,7 @@ class AuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """
         Handle any select operations.
@@ -54,7 +54,7 @@ class AuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         referenced_entities: list[ReferencedEntity],
-        conditions: EntityConditions | None,
+        condition: EntityCondition | None,
         changes: dict[str, Any],
     ) -> AsyncIterator[tuple[Mapper[Any], ExpressionElementRole[Any]]]:
         """

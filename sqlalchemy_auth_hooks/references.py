@@ -1,6 +1,6 @@
-from typing import Any, TypedDict
+from typing import Any
 
-from sqlalchemy import Alias, ColumnClause, FromClause, ReturnsRows
+from sqlalchemy import ColumnClause, ReturnsRows
 from sqlalchemy.orm import Mapper
 from sqlalchemy.sql.operators import OperatorType
 
@@ -23,61 +23,111 @@ class ReferencedEntity:
         return f"ReferencedEntity(entity={self.entity}, selectable={repr(self.selectable)})"  # pragma: no cover
 
 
-class EntityConditions:
-    pass
-
-
-class CompositeConditions(EntityConditions):
-    def __init__(self, operator: OperatorType, conditions: list[EntityConditions]) -> None:
-        self.conditions = conditions
+class EntityCondition:
+    def __init__(self, operator: OperatorType) -> None:
         self.operator = operator
+
+
+class UnaryCondition(EntityCondition):
+    def __init__(self, operator: OperatorType, value: Any) -> None:
+        super().__init__(operator)
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            self.operator == other.operator and self.value == other.value
+            if isinstance(other, UnaryCondition)
+            else False
+        )
+
+    def __repr__(self) -> str:
+        return f"UnaryCondition(operator={self.operator.__name__}, value={self.value})"
+
+
+class CompositeCondition(EntityCondition):
+    def __init__(self, operator: OperatorType, conditions: list[EntityCondition]) -> None:
+        super().__init__(operator)
+        self.conditions = conditions
 
     def __eq__(self, other: object) -> bool:
         return (
             self.conditions == other.conditions and self.operator == other.operator
-            if isinstance(other, CompositeConditions)
+            if isinstance(other, CompositeCondition)
             else False
         )
 
     def __repr__(self) -> str:
         return (
-            f"CompositeConditions(operator={self.operator.__name__}, conditions={self.conditions})"  # pragma: no cover
+            f"CompositeCondition(operator={self.operator.__name__}, conditions={self.conditions})"  # pragma: no cover
         )
 
 
-class ConditionsDict(TypedDict):
-    operator: OperatorType
-    value: Any
+class LiteralExpression:
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return self.value == other.value if isinstance(other, LiteralExpression) else False
+
+    def __repr__(self) -> str:
+        return f"LiteralExpression(value={self.value})"
 
 
-class ReferenceConditions(EntityConditions):
-    def __init__(self, selectable: Alias | FromClause, conditions: dict["str | DynamicValue", ConditionsDict]) -> None:
-        self.selectable = selectable
-        self.conditions = conditions
+class Expression:
+    def __init__(
+        self, left: ColumnClause | LiteralExpression, operator: OperatorType, right: ColumnClause | LiteralExpression
+    ) -> None:
+        self.left = left
+        self.operator = operator
+        self.right = right
 
     def __eq__(self, other: object) -> bool:
         return (
-            self.selectable == other.selectable and self.conditions == other.conditions
-            if isinstance(other, ReferenceConditions)
+            self.left == other.left and self.operator == other.operator and self.right == other.right
+            if isinstance(other, Expression)
             else False
         )
 
     def __repr__(self) -> str:
-        return f"ReferenceConditions(selectable={self.selectable}, conditions={self.conditions})"  # pragma: no cover
+        return f"Expression(left={self.left}, operator={self.operator.__name__}, right={self.right})"
 
 
-class DynamicValue:
-    def __init__(self, ref: ColumnClause) -> None:
-        self.ref = ref
-
-    def __str__(self) -> str:
-        return f"DynamicValue({self.ref}.{self.ref.name})"
-
-    def __repr__(self) -> str:
-        return str(self)  # pragma: no cover
+class NestedExpression:
+    def __init__(
+        self, left: "Expression | NestedExpression", operator: OperatorType, right: "Expression | NestedExpression"
+    ) -> None:
+        self.left = left
+        self.operator = operator
+        self.right = right
 
     def __eq__(self, other: object) -> bool:
-        return self.ref == other.ref if isinstance(other, DynamicValue) else False
+        return (
+            self.left == other.left and self.operator == other.operator and self.right == other.right
+            if isinstance(other, NestedExpression)
+            else False
+        )
 
-    def __hash__(self) -> int:
-        return hash(self.ref)
+    def __repr__(self) -> str:
+        return f"NestedExpression(left={self.left}, operator={self.operator.__name__}, right={self.right})"
+
+
+class ReferenceCondition(EntityCondition):
+    def __init__(
+        self,
+        left: Expression | NestedExpression | LiteralExpression | ColumnClause,
+        operator: OperatorType,
+        right: Expression | NestedExpression | LiteralExpression | ColumnClause,
+    ) -> None:
+        super().__init__(operator)
+        self.left = left
+        self.right = right
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            self.left == other.left and self.operator == other.operator and self.right == other.right
+            if isinstance(other, ReferenceCondition)
+            else False
+        )
+
+    def __repr__(self) -> str:
+        return f"ReferenceCondition(left={self.left}, operator={self.operator.__name__}, right={self.right})"

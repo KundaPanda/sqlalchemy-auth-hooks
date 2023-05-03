@@ -4,7 +4,7 @@ from sqlalchemy.orm import ORMExecuteState
 from sqlalchemy.sql.functions import concat
 from sqlalchemy.sql.operators import startswith_op
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import ReferenceCondition, ReferencedEntity
 from tests.core.conftest import User
 
 

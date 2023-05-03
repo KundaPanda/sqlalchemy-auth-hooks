@@ -2,8 +2,9 @@ from sqlalchemy import inspect
 from sqlalchemy.sql.operators import and_, eq
 
 from sqlalchemy_auth_hooks.references import (
-    CompositeConditions,
-    ReferenceConditions,
+    CompositeCondition,
+    LiteralExpression,
+    ReferenceCondition,
     ReferencedEntity,
 )
 from tests.core.conftest import User, UserGroup
@@ -22,7 +23,11 @@ def test_simple_get(engine, add_user, auth_handler, authorized_session):
                 selectable=selectable,
             ),
         ],
-        ReferenceConditions(selectable, {"id": {"operator": eq, "value": 1}}),
+        ReferenceCondition(
+            left=selectable.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
     )
 
 
@@ -39,7 +44,11 @@ async def test_simple_get_async(async_engine, add_user_async, auth_handler, auth
                 selectable=selectable,
             ),
         ],
-        ReferenceConditions(selectable, {"id": {"operator": eq, "value": add_user_async.id}}),
+        ReferenceCondition(
+            left=selectable.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user_async.id),
+        ),
     )
 
 
@@ -56,11 +65,19 @@ def test_select_get(engine, add_user, user_group, auth_handler, authorized_sessi
                 selectable=selectable,
             ),
         ],
-        CompositeConditions(
+        CompositeCondition(
             operator=and_,
             conditions=[
-                ReferenceConditions(selectable, {"user_id": {"operator": eq, "value": 1}}),
-                ReferenceConditions(selectable, {"group_id": {"operator": eq, "value": 1}}),
+                ReferenceCondition(
+                    left=selectable.c.user_id,
+                    operator=eq,
+                    right=LiteralExpression(add_user.id),
+                ),
+                ReferenceCondition(
+                    left=selectable.c.group_id,
+                    operator=eq,
+                    right=LiteralExpression(user_group.id),
+                ),
             ],
         ),
     )

@@ -15,10 +15,15 @@ from sqlalchemy.orm import (
     ORMExecuteState,
     with_loader_criteria,
 )
-from sqlalchemy.sql.operators import eq
+from sqlalchemy.sql.operators import and_, eq
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import (
+    CompositeCondition,
+    LiteralExpression,
+    ReferenceCondition,
+    ReferencedEntity,
+)
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 from sqlalchemy_auth_hooks.utils import collect_entities, extract_references, get_insert_columns, get_table_mapper
 
@@ -88,15 +93,24 @@ class StatementAuthorizer:
     async def authorize_object_delete(self, session: AuthorizedSession, states: Iterable[InstanceState[Any]]) -> None:
         for state in states:
             mapper: Mapper[Any] = state.mapper  # type: ignore
+            table = state.class_.__table__
+            condition = CompositeCondition(
+                operator=and_,
+                conditions=[
+                    ReferenceCondition(
+                        left=getattr(table.c, key.name),
+                        operator=eq,
+                        right=LiteralExpression(state.dict[key.name]),
+                    )
+                    for key in mapper.primary_key
+                ],
+            )
+            if len(condition.conditions) == 1:
+                condition = condition.conditions[0]
             async for _, filter_exp in self.auth_handler.before_delete(
                 session,
                 [ReferencedEntity(mapper, state.class_.__table__)],
-                ReferenceConditions(
-                    selectable=state.class_.__table__,
-                    conditions={
-                        key.name: {"operator": eq, "value": state.dict[key.name]} for key in mapper.primary_key
-                    },
-                ),
+                condition,
             ):
                 if filter_exp != true():
                     session.rollback()
@@ -107,15 +121,24 @@ class StatementAuthorizer:
     ) -> None:
         for state, changes in states:
             mapper: Mapper[Any] = state.mapper  # type: ignore
+            table = state.class_.__table__
+            condition = CompositeCondition(
+                operator=and_,
+                conditions=[
+                    ReferenceCondition(
+                        left=getattr(table.c, key.name),
+                        operator=eq,
+                        right=LiteralExpression(state.dict[key.name]),
+                    )
+                    for key in mapper.primary_key
+                ],
+            )
+            if len(condition.conditions) == 1:
+                condition = condition.conditions[0]
             async for _, filter_exp in self.auth_handler.before_update(
                 session,
-                [ReferencedEntity(mapper, state.class_.__table__)],
-                ReferenceConditions(
-                    selectable=state.class_.__table__,
-                    conditions={
-                        key.name: {"operator": eq, "value": state.dict[key.name]} for key in mapper.primary_key
-                    },
-                ),
+                [ReferencedEntity(mapper, table)],
+                condition,
                 changes,
             ):
                 if filter_exp != true():

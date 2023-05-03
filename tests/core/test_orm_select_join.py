@@ -1,7 +1,7 @@
 from sqlalchemy import inspect, select
 from sqlalchemy.sql.operators import eq
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import LiteralExpression, ReferenceCondition, ReferencedEntity
 from tests.core.conftest import Group, User, UserGroup
 
 
@@ -19,9 +19,10 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler, authorized_se
     auth_handler.before_select.assert_any_call(
         authorized_session,
         [ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__)],
-        ReferenceConditions(
-            selectable=UserGroup.__table__,
-            conditions={"user_id": {"operator": eq, "value": 1}},
+        ReferenceCondition(
+            left=LiteralExpression(user.id),
+            operator=eq,
+            right=UserGroup.__table__.c.user_id,
         ),
     )
     # Only one group should be queried
@@ -33,8 +34,9 @@ def test_join_lazyload(engine, add_user, user_group, auth_handler, authorized_se
                 selectable=Group.__table__,
             )
         ],
-        ReferenceConditions(
-            selectable=Group.__table__,
-            conditions={"id": {"operator": eq, "value": 1}},
+        ReferenceCondition(
+            left=Group.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(user_group.id),
         ),
     )

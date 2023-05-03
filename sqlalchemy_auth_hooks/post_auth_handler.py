@@ -1,7 +1,7 @@
 import abc
 from typing import Any
 
-from sqlalchemy_auth_hooks.references import EntityConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import EntityCondition, ReferencedEntity
 from sqlalchemy_auth_hooks.session import AuthorizedSession
 
 
@@ -48,7 +48,7 @@ class PostAuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         entity: ReferencedEntity,
-        conditions: EntityConditions | None,
+        conditions: EntityCondition | None,
     ) -> None:
         """
         Handle the deletion of multiple SQLAlchemy models.
@@ -60,7 +60,7 @@ class PostAuthHandler(abc.ABC):
         self,
         session: AuthorizedSession,
         entity: ReferencedEntity,
-        conditions: EntityConditions | None,
+        conditions: EntityCondition | None,
         changes: dict[str, Any],
     ) -> None:
         """

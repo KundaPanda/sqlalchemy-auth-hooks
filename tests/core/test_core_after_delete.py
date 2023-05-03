@@ -1,7 +1,7 @@
 from sqlalchemy import delete, inspect
 from sqlalchemy.sql.operators import eq
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import LiteralExpression, ReferenceCondition, ReferencedEntity
 from tests.core.conftest import User
 
 
@@ -12,7 +12,11 @@ def test_delete(engine, add_user, post_auth_handler, authorized_session):
     post_auth_handler.after_many_delete.assert_called_once_with(
         authorized_session,
         ReferencedEntity(entity=inspect(User), selectable=User.__table__),
-        ReferenceConditions(selectable=User.__table__, conditions={"id": {"operator": eq, "value": add_user.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user.id),
+        ),
     )
 
 
@@ -23,7 +27,11 @@ async def test_delete_async(engine, add_user_async, post_auth_handler, authorize
     post_auth_handler.after_many_delete.assert_called_once_with(
         authorized_async_session.sync_session,
         ReferencedEntity(entity=inspect(User), selectable=User.__table__),
-        ReferenceConditions(selectable=User.__table__, conditions={"id": {"operator": eq, "value": add_user_async.id}}),
+        ReferenceCondition(
+            left=User.__table__.c.id,
+            operator=eq,
+            right=LiteralExpression(add_user_async.id),
+        ),
     )
 
 
