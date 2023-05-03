@@ -19,6 +19,18 @@ def test_delete(engine, add_user, auth_handler, authorized_session):
     )
 
 
+async def test_delete_async(async_engine, add_user_async, auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        user = await session.get(User, add_user_async.id)
+        await session.delete(user)
+        await session.commit()
+    auth_handler.before_delete.assert_called_once_with(
+        authorized_async_session.sync_session,
+        [ReferencedEntity(entity=inspect(User), selectable=User.__table__)],
+        ReferenceConditions(selectable=User.__table__, conditions={"id": {"operator": eq, "value": add_user_async.id}}),
+    )
+
+
 def test_delete_many(engine, add_user, auth_handler, authorized_session):
     with authorized_session as session:
         user = User(name="Elvis", age=98)
