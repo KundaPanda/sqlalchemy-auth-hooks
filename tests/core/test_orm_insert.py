@@ -18,6 +18,18 @@ def test_insert(engine, add_user, auth_handler, authorized_session):
     )
 
 
+async def test_insert_async(engine, add_user, auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        user = User(name="Elvis", age=98)
+        session.add(user)
+        await session.commit()
+    auth_handler.before_insert.assert_called_once_with(
+        authorized_async_session.sync_session,
+        ReferencedEntity(inspect(User), User.__table__),
+        [{"age": 98, "name": "Elvis"}],
+    )
+
+
 def test_insert_many(engine, add_user, auth_handler, authorized_session):
     with authorized_session as session:
         user = User(name="Elvis", age=98)
