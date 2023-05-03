@@ -19,15 +19,17 @@ structlog = ">=20.0"
 [tool.poetry.group.dev.dependencies]
 black = { extras = ["d"], version = "^23.3.0" }
 ruff = "^0.0.261"
-pyright = "^1.1.303"
-pytest = "^7.3.0"
+pyright = "^1.1.305"
+pytest = "^7.3.1"
 pytest-mock = "^3.10.0"
 pytest-xdist = "^3.2.1"
 pytest-cov = "^4.0.0"
-sqlalchemy-utils = "^0.41.0"
+sqlalchemy-utils = "^0.41.1"
 anyio = "^3.6.2"
 aiosqlite = "^0.18.0"
 safety = "^2.3.5"
+pip-audit = "^2.5.4"
+requests = "^2.29.0"
 
 
 [tool.poetry.group.oso]

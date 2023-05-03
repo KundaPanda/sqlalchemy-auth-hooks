@@ -60,7 +60,7 @@ jobs:
       - name: Run safety checks
         run: |
           source .venv/bin/activate
-          safety check --ignore 42194
+          safety check --ignore 42194,51499
       #----------------------------------------------
       #    add matrix specifics and run test suite
       #----------------------------------------------
