@@ -9,6 +9,17 @@ def test_update(engine, add_user, post_auth_handler, authorized_session):
     post_auth_handler.after_single_update.assert_called_once_with(authorized_session, u, {"name": "Jane"})
 
 
+async def test_update_async(engine, add_user_async, post_auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        u = await session.get(User, add_user_async.id)
+        u.name = "Jane"
+        await session.commit()
+        await session.refresh(u)
+    post_auth_handler.after_single_update.assert_called_once_with(
+        authorized_async_session.sync_session, u, {"name": "Jane"}
+    )
+
+
 def test_update_multiple_same_column(engine, add_user, post_auth_handler, authorized_session):
     with authorized_session as session:
         u = session.get(User, add_user.id)
