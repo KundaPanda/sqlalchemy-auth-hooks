@@ -26,6 +26,23 @@ def test_simple_get(engine, add_user, auth_handler, authorized_session):
     )
 
 
+async def test_simple_get_async(async_engine, add_user_async, auth_handler, authorized_async_session):
+    async with authorized_async_session as session:
+        await session.get(User, add_user_async.id)
+    mapper = inspect(User)
+    selectable = User.__table__
+    auth_handler.before_select.assert_called_once_with(
+        authorized_async_session.sync_session,
+        [
+            ReferencedEntity(
+                entity=mapper,
+                selectable=selectable,
+            ),
+        ],
+        ReferenceConditions(selectable, {"id": {"operator": eq, "value": add_user_async.id}}),
+    )
+
+
 def test_select_get(engine, add_user, user_group, auth_handler, authorized_session):
     with authorized_session as session:
         session.get(UserGroup, (add_user.id, user_group.id))
