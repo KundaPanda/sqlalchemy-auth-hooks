@@ -1,8 +1,8 @@
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import aliased, joinedload, selectinload
-from sqlalchemy.sql.operators import eq, in_op
+from sqlalchemy.sql.operators import and_, eq, in_op
 
-from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
+from sqlalchemy_auth_hooks.references import CompositeConditions, DynamicValue, ReferenceConditions, ReferencedEntity
 from tests.core.conftest import Group, User, UserGroup
 
 
@@ -16,7 +16,7 @@ def test_join(engine, add_user, user_group, auth_handler, authorized_session):
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
         ],
-        None,
+        ReferenceConditions(Group.__table__, {"id": {"operator": eq, "value": DynamicValue(UserGroup.group_id)}}),
     )
 
 
@@ -36,9 +36,18 @@ def test_join_with_where(engine, add_user, user_group, auth_handler, authorized_
                 selectable=Group.__table__,
             ),
         ],
-        ReferenceConditions(
-            selectable=Group.__table__,
-            conditions={"id": {"operator": eq, "value": 1}},
+        CompositeConditions(
+            operator=and_,
+            conditions=[
+                ReferenceConditions(
+                    Group.__table__,
+                    {"id": {"operator": eq, "value": DynamicValue(UserGroup.group_id)}},
+                ),
+                ReferenceConditions(
+                    Group.__table__,
+                    {"id": {"operator": eq, "value": 1}},
+                ),
+            ],
         ),
     )
 
@@ -54,9 +63,18 @@ def test_join_with_condition(engine, add_user, user_group, auth_handler, authori
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
         ],
-        ReferenceConditions(
-            selectable=Group.__table__,
-            conditions={"id": {"operator": eq, "value": 1}},
+        CompositeConditions(
+            operator=and_,
+            conditions=[
+                ReferenceConditions(
+                    Group.__table__,
+                    {"id": {"operator": eq, "value": DynamicValue(UserGroup.group_id)}},
+                ),
+                ReferenceConditions(
+                    Group.__table__,
+                    {"id": {"operator": eq, "value": 1}},
+                ),
+            ],
         ),
     )
 
@@ -86,7 +104,10 @@ def test_join_recursive(engine, add_user, user_group, auth_handler, authorized_s
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=inspect(alias).selectable),
         ],
-        None,
+        ReferenceConditions(
+            Group.__table__,
+            {"id": {"operator": eq, "value": DynamicValue(alias.parent_group_id)}},
+        ),
     )
 
 
@@ -118,9 +139,19 @@ def test_join_recursive_with_condition(engine, add_user, user_group, auth_handle
                 selectable=inspect(alias).selectable,
             ),
         ],
-        ReferenceConditions(
-            selectable=inspect(alias).selectable,
-            conditions={"id": {"operator": eq, "value": 2}},
+        CompositeConditions(
+            operator=and_,
+            conditions=[
+                ReferenceConditions(
+                    selectable=Group.__table__,
+                    conditions={
+                        "id": {"operator": eq, "value": DynamicValue(inspect(alias).selectable.c.parent_group_id)}
+                    },
+                ),
+                ReferenceConditions(
+                    selectable=inspect(alias).selectable, conditions={"id": {"operator": eq, "value": 2}}
+                ),
+            ],
         ),
     )
 
@@ -179,7 +210,8 @@ def test_join_joinedload(engine, add_user, user_group, auth_handler, authorized_
     assert auth_handler.before_select.call_args_list[0].args[1][1].selectable.original == UserGroup.__table__
     assert auth_handler.before_select.call_args_list[0].args[1][2].entity == inspect(Group)
     assert auth_handler.before_select.call_args_list[0].args[1][2].selectable.original == Group.__table__
-    assert auth_handler.before_select.call_args_list[0].args[2] is None
+    assert auth_handler.before_select.call_args_list[0].args[2].conditions["id"]["operator"] == eq
+    assert auth_handler.before_select.call_args_list[0].args[2].conditions["id"]["value"].ref.name == "group_id"
 
 
 async def test_join_async(
@@ -194,5 +226,7 @@ async def test_join_async(
             ReferencedEntity(entity=inspect(UserGroup), selectable=UserGroup.__table__),
             ReferencedEntity(entity=inspect(Group), selectable=Group.__table__),
         ],
-        None,
+        ReferenceConditions(
+            selectable=Group.__table__, conditions={"id": {"operator": eq, "value": DynamicValue(UserGroup.group_id)}}
+        ),
     )

@@ -1,4 +1,4 @@
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, literal, select
 from sqlalchemy.sql.operators import and_, eq, or_, startswith_op
 
 from sqlalchemy_auth_hooks.references import (
@@ -118,4 +118,21 @@ def test_select_multiple_conditions(engine, add_user, user_group, auth_handler, 
                 ),
             ],
         ),
+    )
+
+
+def test_simple_select_func(engine, add_user, auth_handler, authorized_session):
+    with authorized_session as session:
+        session.execute(select(User.name + literal(" NAME")).where(User.name + literal(" NAME") == "John NAME"))
+    mapper = inspect(User)
+    selectable = User.__table__
+    auth_handler.before_select.assert_called_once_with(
+        authorized_session,
+        [
+            ReferencedEntity(
+                entity=mapper,
+                selectable=selectable,
+            ),
+        ],
+        None,
     )

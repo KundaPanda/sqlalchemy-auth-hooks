@@ -21,10 +21,10 @@ from sqlalchemy.sql.selectable import Alias, ReturnsRows
 
 from sqlalchemy_auth_hooks.references import (
     CompositeConditions,
+    DynamicValue,
     EntityConditions,
     ReferenceConditions,
     ReferencedEntity,
-    DynamicValue,
 )
 
 logger = structlog.get_logger()
@@ -65,6 +65,7 @@ def _process_condition(
         right = condition.left
     else:
         # We only care about conditions that involve columns
+        logger.warning(f"Skipping condition {condition.compile()}")
         return None
 
     selectable = left.table
@@ -91,7 +92,9 @@ def _process_condition(
             )
         else:
             # What else could it be?
+            logger.warning(f"Skipping condition {condition.compile()} for {right}")
             return
+    logger.warning(f"Skipping condition {condition.compile()} for {table.compile()}")
 
 
 def traverse_conditions(
@@ -132,9 +135,14 @@ def process_clauses(
 ) -> tuple[dict[Mapper[Any], dict[ReturnsRows, ReferencedEntity]], EntityConditions | None]:
     all_conditions: list[EntityConditions] = []
     for from_clause in froms:
-        if isinstance(from_clause, Join) and isinstance(from_clause.onclause, ExpressionClauseList):
-            for clause in from_clause.onclause.clauses:
-                condition = traverse_conditions(clause, parameters)
+        if isinstance(from_clause, Join):
+            if isinstance(from_clause.onclause, ExpressionClauseList):
+                for clause in from_clause.onclause.clauses:
+                    condition = traverse_conditions(clause, parameters)
+                    if condition is not None:
+                        all_conditions.append(condition)
+            elif isinstance(from_clause.onclause, ColumnElement):
+                condition = traverse_conditions(from_clause.onclause, parameters)
                 if condition is not None:
                     all_conditions.append(condition)
 

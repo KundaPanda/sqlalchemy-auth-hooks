@@ -20,7 +20,7 @@ class ReferencedEntity:
         return self.entity == other.entity and self.selectable == other.selectable
 
     def __repr__(self) -> str:
-        return f"ReferencedEntity({self.entity}, {repr(self.selectable)})"  # pragma: no cover
+        return f"ReferencedEntity(entity={self.entity}, selectable={repr(self.selectable)})"  # pragma: no cover
 
 
 class EntityConditions:
@@ -40,7 +40,9 @@ class CompositeConditions(EntityConditions):
         )
 
     def __repr__(self) -> str:
-        return f"ConditionsClause({self.operator}[{self.conditions}])"  # pragma: no cover
+        return (
+            f"CompositeConditions(operator={self.operator.__name__}, conditions={self.conditions})"  # pragma: no cover
+        )
 
 
 class ConditionsDict(TypedDict):
@@ -49,7 +51,7 @@ class ConditionsDict(TypedDict):
 
 
 class ReferenceConditions(EntityConditions):
-    def __init__(self, selectable: Alias | FromClause, conditions: dict[str, ConditionsDict]) -> None:
+    def __init__(self, selectable: Alias | FromClause, conditions: dict["str | DynamicValue", ConditionsDict]) -> None:
         self.selectable = selectable
         self.conditions = conditions
 
@@ -61,7 +63,7 @@ class ReferenceConditions(EntityConditions):
         )
 
     def __repr__(self) -> str:
-        return f"ReferenceConditions({self.selectable}, {self.conditions})"  # pragma: no cover
+        return f"ReferenceConditions(selectable={self.selectable}, conditions={self.conditions})"  # pragma: no cover
 
 
 class DynamicValue:
@@ -69,10 +71,13 @@ class DynamicValue:
         self.ref = ref
 
     def __str__(self) -> str:
-        return f"DynamicValue({self.ref.table}.{self.ref.name})"
+        return f"DynamicValue({self.ref}.{self.ref.name})"
 
     def __repr__(self) -> str:
         return str(self)  # pragma: no cover
 
     def __eq__(self, other: object) -> bool:
         return self.ref == other.ref if isinstance(other, DynamicValue) else False
+
+    def __hash__(self) -> int:
+        return hash(self.ref)
