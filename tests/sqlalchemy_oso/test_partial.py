@@ -2,13 +2,14 @@ from polar import Variable
 from sqlalchemy.orm import Session
 
 from sqlalchemy_auth_hooks.oso.sqlalchemy_oso.partial import partial_to_filter
+from sqlalchemy_auth_hooks.session import UnauthorizedSession
 
 from .models import User
 
 
 def test_partial_to_query_filter(oso, engine):
     oso.load_str('ok(_: User{username:"gwen"});')
-    session = Session(bind=engine)
+    session = UnauthorizedSession(bind=engine)
     gwen = User(username="gwen")
     session.add(gwen)
     steve = User(username="steve")
