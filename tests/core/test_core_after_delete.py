@@ -1,7 +1,7 @@
 from sqlalchemy import delete, inspect
 from sqlalchemy.sql.operators import eq
 
-from sqlalchemy_auth_hooks.references import ReferencedEntity, ReferenceConditions
+from sqlalchemy_auth_hooks.references import ReferenceConditions, ReferencedEntity
 from tests.core.conftest import User
 
 
