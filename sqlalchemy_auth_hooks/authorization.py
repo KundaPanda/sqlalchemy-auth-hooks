@@ -18,6 +18,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.sql.operators import and_, eq
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
+from sqlalchemy_auth_hooks.clauses import collect_entities, extract_references
 from sqlalchemy_auth_hooks.references import (
     CompositeCondition,
     LiteralExpression,
@@ -25,7 +26,7 @@ from sqlalchemy_auth_hooks.references import (
     ReferencedEntity,
 )
 from sqlalchemy_auth_hooks.session import AuthorizedSession
-from sqlalchemy_auth_hooks.utils import collect_entities, extract_references, get_insert_columns, get_table_mapper
+from sqlalchemy_auth_hooks.utils import get_insert_columns, get_table_mapper
 
 
 class StatementAuthorizer:

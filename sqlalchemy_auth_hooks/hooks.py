@@ -24,6 +24,7 @@ from structlog.stdlib import BoundLogger
 
 from sqlalchemy_auth_hooks.auth_handler import AuthHandler
 from sqlalchemy_auth_hooks.authorization import StatementAuthorizer
+from sqlalchemy_auth_hooks.clauses import extract_references
 from sqlalchemy_auth_hooks.events import (
     CreateManyEvent,
     CreateSingleEvent,
@@ -36,7 +37,7 @@ from sqlalchemy_auth_hooks.events import (
 from sqlalchemy_auth_hooks.post_auth_handler import PostAuthHandler
 from sqlalchemy_auth_hooks.references import ReferencedEntity
 from sqlalchemy_auth_hooks.session import check_skip
-from sqlalchemy_auth_hooks.utils import extract_references, get_insert_columns, get_table_mapper, run_loop
+from sqlalchemy_auth_hooks.utils import get_insert_columns, get_table_mapper, run_loop
 
 logger: BoundLogger = structlog.get_logger()
 
