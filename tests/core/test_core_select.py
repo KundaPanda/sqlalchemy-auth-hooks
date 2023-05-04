@@ -1,5 +1,5 @@
-from sqlalchemy import inspect, literal, select
-from sqlalchemy.sql.operators import and_, concat_op, eq, or_, startswith_op
+from sqlalchemy import inspect, literal, select, func, ColumnClause
+from sqlalchemy.sql.operators import and_, concat_op, eq, or_, startswith_op, ne
 
 from sqlalchemy_auth_hooks.references import (
     CompositeCondition,
@@ -163,5 +163,26 @@ def test_simple_select_func(engine, add_user, auth_handler, authorized_session):
             left=ColumnExpression(left=selectable.c.name, operator=concat_op, right=LiteralExpression(" NAME")),
             operator=eq,
             right=LiteralExpression("John NAME"),
+        ),
+    )
+
+
+def test_column_where(engine, add_user, auth_handler, authorized_session):
+    with authorized_session as session:
+        session.execute(select(func.length(User.name)).where(User.name != User.id))
+    mapper = inspect(User)
+    selectable = User.__table__
+    auth_handler.before_select.assert_called_once_with(
+        authorized_session,
+        [
+            ReferencedEntity(
+                entity=mapper,
+                selectable=selectable,
+            ),
+        ],
+        ReferenceCondition(
+            left=User.__table__.c.name,
+            operator=ne,
+            right=User.__table__.c.id,
         ),
     )
