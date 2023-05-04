@@ -67,14 +67,9 @@ def _process_expr(
     if isinstance(expr, BinaryExpression):
         left = _process_expr(expr.left, parameters)
         right = _process_expr(expr.right, parameters)
-        if isinstance(left, Expression) or isinstance(right, Expression):
-            return NestedExpression(operator=expr.operator, left=left, right=right)
-        if isinstance(left, ColumnClause):
+        if isinstance(left, (ColumnClause, LiteralExpression)) and isinstance(right, (ColumnClause, LiteralExpression)):
             return ColumnExpression(operator=expr.operator, left=left, right=right)
-        if isinstance(right, ColumnClause):
-            return ColumnExpression(operator=expr.operator, left=left, right=right)
-        logger.warning("Could not process expression", expr=expr, left=left, right=right)
-        return LiteralExpression(None)
+        return NestedExpression(operator=expr.operator, left=left, right=right)
 
     if isinstance(expr, ColumnClause):
         return expr
