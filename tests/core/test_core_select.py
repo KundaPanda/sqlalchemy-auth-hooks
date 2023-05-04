@@ -3,7 +3,7 @@ from sqlalchemy.sql.operators import and_, concat_op, eq, or_, startswith_op
 
 from sqlalchemy_auth_hooks.references import (
     CompositeCondition,
-    Expression,
+    ColumnExpression,
     LiteralExpression,
     ReferenceCondition,
     ReferencedEntity,
@@ -160,7 +160,7 @@ def test_simple_select_func(engine, add_user, auth_handler, authorized_session):
             ),
         ],
         ReferenceCondition(
-            left=Expression(left=selectable.c.name, operator=concat_op, right=LiteralExpression(" NAME")),
+            left=ColumnExpression(left=selectable.c.name, operator=concat_op, right=LiteralExpression(" NAME")),
             operator=eq,
             right=LiteralExpression("John NAME"),
         ),

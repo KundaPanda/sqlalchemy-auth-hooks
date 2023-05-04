@@ -1,3 +1,4 @@
+import abc
 from typing import Any
 
 from sqlalchemy import ColumnClause, ReturnsRows
@@ -62,7 +63,13 @@ class CompositeCondition(EntityCondition):
         )
 
 
-class LiteralExpression:
+class Expression(abc.ABC):
+    @abc.abstractmethod
+    def __eq__(self, other: object) -> bool:
+        ...
+
+
+class LiteralExpression(Expression):
     def __init__(self, value: Any) -> None:
         self.value = value
 
@@ -73,9 +80,12 @@ class LiteralExpression:
         return f"LiteralExpression(value={self.value})"
 
 
-class Expression:
+class ColumnExpression(Expression):
     def __init__(
-        self, left: ColumnClause | LiteralExpression, operator: OperatorType, right: ColumnClause | LiteralExpression
+        self,
+        left: ColumnClause[Any] | LiteralExpression,
+        operator: OperatorType,
+        right: ColumnClause[Any] | LiteralExpression,
     ) -> None:
         self.left = left
         self.operator = operator
@@ -83,18 +93,19 @@ class Expression:
 
     def __eq__(self, other: object) -> bool:
         return (
-            self.left == other.left and self.operator == other.operator and self.right == other.right
-            if isinstance(other, Expression)
-            else False
+            isinstance(other, ColumnExpression)
+            and _cmp_expressions(self.left, other.left)
+            and _cmp_expressions(self.right, other.right)
+            and self.operator == other.operator
         )
 
     def __repr__(self) -> str:
         return f"Expression(left={self.left}, operator={self.operator.__name__}, right={self.right})"
 
 
-class NestedExpression:
+class NestedExpression(Expression):
     def __init__(
-        self, left: "Expression | NestedExpression", operator: OperatorType, right: "Expression | NestedExpression"
+        self, left: Expression | ColumnClause[Any], operator: OperatorType, right: Expression | ColumnClause[Any]
     ) -> None:
         self.left = left
         self.operator = operator
@@ -102,9 +113,10 @@ class NestedExpression:
 
     def __eq__(self, other: object) -> bool:
         return (
-            self.left == other.left and self.operator == other.operator and self.right == other.right
-            if isinstance(other, NestedExpression)
-            else False
+            isinstance(other, NestedExpression)
+            and _cmp_expressions(self.left, other.left)
+            and _cmp_expressions(self.right, other.right)
+            and self.operator == other.operator
         )
 
     def __repr__(self) -> str:
@@ -113,10 +125,7 @@ class NestedExpression:
 
 class ReferenceCondition(EntityCondition):
     def __init__(
-        self,
-        left: Expression | NestedExpression | LiteralExpression | ColumnClause,
-        operator: OperatorType,
-        right: Expression | NestedExpression | LiteralExpression | ColumnClause,
+        self, left: Expression | ColumnClause[Any], operator: OperatorType, right: Expression | ColumnClause[Any]
     ) -> None:
         super().__init__(operator)
         self.left = left
@@ -124,10 +133,17 @@ class ReferenceCondition(EntityCondition):
 
     def __eq__(self, other: object) -> bool:
         return (
-            self.left == other.left and self.operator == other.operator and self.right == other.right
-            if isinstance(other, ReferenceCondition)
-            else False
+            isinstance(other, ReferenceCondition)
+            and _cmp_expressions(self.left, other.left)
+            and _cmp_expressions(self.right, other.right)
+            and self.operator == other.operator
         )
 
     def __repr__(self) -> str:
         return f"ReferenceCondition(left={self.left}, operator={self.operator.__name__}, right={self.right})"
+
+
+def _cmp_expressions(left: Expression | ColumnClause[Any], right: Expression | ColumnClause[Any]) -> bool:
+    if not isinstance(left, ColumnClause):
+        return left == right
+    return left.compare(right) if isinstance(right, ColumnClause) else False

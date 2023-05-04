@@ -1,3 +1,5 @@
+# pyright: reportUnnecessaryIsInstance=false
+
 import asyncio
 from collections import defaultdict
 from typing import Any, Generator, Mapping, Sequence, cast
@@ -21,6 +23,7 @@ from sqlalchemy.sql.operators import and_, is_true
 from sqlalchemy.sql.selectable import Alias, ReturnsRows
 
 from sqlalchemy_auth_hooks.references import (
+    ColumnExpression,
     CompositeCondition,
     EntityCondition,
     Expression,
@@ -57,24 +60,27 @@ def get_parameter_value(
 def _process_expr(
     expr: ColumnElement[Any] | BindParameter[Any],
     parameters: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None,
-) -> ColumnClause[Any] | Expression | NestedExpression | LiteralExpression | None:
+) -> ColumnClause[Any] | Expression:
     if isinstance(expr, BindParameter):
         return LiteralExpression(get_parameter_value(expr, parameters))
 
     if isinstance(expr, BinaryExpression):
         left = _process_expr(expr.left, parameters)
         right = _process_expr(expr.right, parameters)
-        if isinstance(left, (Expression, NestedExpression)) or isinstance(right, (Expression, NestedExpression)):
+        if isinstance(left, Expression) or isinstance(right, Expression):
             return NestedExpression(operator=expr.operator, left=left, right=right)
         if isinstance(left, ColumnClause):
-            return Expression(operator=expr.operator, left=left, right=right)
+            return ColumnExpression(operator=expr.operator, left=left, right=right)
         if isinstance(right, ColumnClause):
-            return Expression(operator=expr.operator, left=left, right=right)
+            return ColumnExpression(operator=expr.operator, left=left, right=right)
         logger.warning("Could not process expression", expr=expr, left=left, right=right)
-        return None
+        return LiteralExpression(None)
 
     if isinstance(expr, ColumnClause):
         return expr
+
+    logger.warning("Could not process expression", expr=expr)
+    return LiteralExpression(None)
 
 
 def _process_condition(
@@ -84,6 +90,10 @@ def _process_condition(
     if isinstance(condition, UnaryExpression):
         if condition.operator == is_true and condition.element == true():
             # Ignore 1 = 1 conditions
+            return None
+        if condition.operator is None:
+            # Ignore is null conditions
+            logger.warning("Ignoring condition", condition=condition)
             return None
         return UnaryCondition(operator=condition.operator, value=condition.element)
 
